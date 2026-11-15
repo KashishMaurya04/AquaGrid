@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Node | AquaGrid</title>
+    <meta name="description" content="Edit a water network node in the AquaGrid platform.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'network' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">WATER INTELLIGENCE PLATFORM</p>
+                <h1>Edit Node</h1>
+                <p class="muted">Update the details for <strong>{{ node.name }}</strong> (ID {{ node.id }}).</p>
+            </div>
+            <a href="{{ url_for('network') }}" class="back-link" id="back-to-network">← Back to Network</a>
+        </header>
+
+        <!-- ── Flash messages ──────────────────────────────────────────── -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-list" role="alert" aria-live="polite">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                <span class="flash-icon">{% if category == 'success' %}✓{% else %}⚠{% endif %}</span>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <section class="panel nw-form-panel">
+            <form method="POST" action="{{ url_for('network_edit', node_id=node.id) }}" class="nw-form" novalidate
+                id="edit-node-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="name">Node Name <span class="req">*</span></label>
+                        <input type="text" id="name" name="name" maxlength="120" value="{{ node.name }}" required
+                            autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="node_type">Node Type <span class="req">*</span></label>
+                        <select id="node_type" name="node_type" required>
+                            {% for t in allowed_types %}
+                            <option value="{{ t }}" {% if node.node_type==t %}selected{% endif %}>
+                                {{ t | capitalize }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="location">Location</label>
+                        <input type="text" id="location" name="location" maxlength="200"
+                            value="{{ node.location or '' }}" autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="status">Status <span class="req">*</span></label>
+                        <select id="status" name="status" required>
+                            {% for s in allowed_statuses %}
+                            <option value="{{ s }}" {% if node.status==s %}selected{% endif %}>
+                                {{ s | capitalize }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="edit-actions">
+                    <button type="submit" class="primary-button nw-submit-btn" id="save-node-btn">
+                        ✓ Save Changes
+                    </button>
+                    <a href="{{ url_for('network') }}" class="cancel-link" id="cancel-edit">Cancel</a>
+                </div>
+            </form>
+        </section>
+
+        <footer>
+            AQUAGRID · MCA PROJECT PROTOTYPE · ALL DISPLAYED METRICS ARE DEMONSTRATION DATA
+        </footer>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>

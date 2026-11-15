@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Route Finder | AquaGrid</title>
+    <meta name="description"
+        content="Find optimal shortest distribution paths between water network nodes using Dijkstra's algorithm in AquaGrid.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/graph.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'route' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <!-- ── Top bar ─────────────────────────────────────────────────── -->
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">SHORTEST-PATH ROUTING · DIJKSTRA ENGINE</p>
+                <h1>Route Finder</h1>
+                <p class="muted">Find optimal paths between network nodes using Dijkstra's shortest-path algorithm.</p>
+            </div>
+            <span class="status"><span></span> ROUTE OPTIMIZATION</span>
+        </header>
+
+        <!-- ── Simulation Disclaimer Banner ────────────────────────────── -->
+        <section class="simulation-banner" role="region" aria-label="Route Planning Notice">
+            <span class="sim-icon">🧭</span>
+            <div>
+                <div class="sim-title">Graph-Based Route Planning Mode</div>
+                <p class="sim-text">
+                    This module computes optimal network routes using Dijkstra's algorithm based on configurable pipe routing costs.
+                    <strong>This is graph-based route planning, not hydraulic optimization</strong> (does not account for pressure differentials,
+                    friction head loss, pump curves, or elevation gradients) and <strong>not live sensor data</strong>.
+                </p>
+            </div>
+        </section>
+
+        {% if is_empty_network %}
+        <!-- ── Empty Network State ────────────────────────────────────── -->
+        <section class="panel">
+            <div class="nw-empty">
+                <span class="nw-empty-icon">🧭</span>
+                <h3>The Water Network is Empty</h3>
+                <p class="muted">There are no network nodes in the database yet. Add tanks, junctions, or valves first to plan routes.</p>
+                <div style="margin-top: 18px;">
+                    <a href="/network" class="btn btn-primary" style="display:inline-block; padding: 10px 20px; border-radius: 8px; text-decoration: none; color: white; background: #1a7a54; font-weight: 700;">+ Go to Water Network</a>
+                </div>
+            </div>
+        </section>
+        {% else %}
+
+        <!-- ── Route Finder Control Panel ─────────────────────────────── -->
+        <section class="panel graph-controls-panel" aria-labelledby="controls-heading">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="controls-heading" style="font-size: 16px; margin-bottom: 4px;">Select Route Endpoints</h2>
+                    <p class="muted">Choose source and destination nodes to compute the minimum-cost pipe path.</p>
+                </div>
+                <span class="tag">{{ graph.node_count }} nodes · {{ graph.edge_count }} active pipes</span>
+            </div>
+
+            <form method="POST" action="/route" class="nw-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="form-row route-form-row">
+                    <div class="form-group">
+                        <label for="source_id">Source Node <span class="req">*</span></label>
+                        <select id="source_id" name="source_id" required>
+                            {% for node in all_nodes %}
+                            <option value="{{ node.id }}" {% if source_id == node.id %}selected{% endif %}>
+                                {{ node.name }} (ID #{{ node.id }} · {{ node.node_type|capitalize }} · {{ node.status|capitalize }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="destination_id">Destination Node <span class="req">*</span></label>
+                        <select id="destination_id" name="destination_id" required>
+                            {% for node in all_nodes %}
+                            <option value="{{ node.id }}" {% if destination_id == node.id %}selected{% endif %}>
+                                {{ node.name }} (ID #{{ node.id }} · {{ node.node_type|capitalize }} · {{ node.status|capitalize }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="traversal_mode">Directionality</label>
+                        <select id="traversal_mode" name="traversal_mode">
+                            <option value="undirected" {% if traversal_mode == 'undirected' %}selected{% endif %}>
+                                Bidirectional (Standard Pipes)
+                            </option>
+                            <option value="directed" {% if traversal_mode == 'directed' %}selected{% endif %}>
+                                Directed Flow (From → To Only)
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="form-group form-action-group">
+                        <button type="submit" class="btn-compute" id="compute-route-btn">
+                            Compute Route
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+        {% if validation_error %}
+        <!-- ── Endpoint Validation Error ────────────────────────────── -->
+        <section class="panel" id="validation-error-panel" style="margin-bottom: 24px; border-left: 4px solid #b91c1c; background: #fff5f5;">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 6px 0;">
+                <span style="font-size: 24px; color: #b91c1c;">⚠</span>
+                <div>
+                    <h3 style="font-size: 15px; color: #b91c1c; margin: 0 0 2px 0; font-weight: 700;">Validation Error</h3>
+                    <p style="margin: 0; color: #475569; font-size: 13px;">{{ validation_error }}</p>
+                </div>
+            </div>
+        </section>
+        {% endif %}
+
+        {% if route_result %}
+        <div id="route-results-container">
+            <!-- Outdated notification banner -->
+            <div id="outdated-notice" class="outdated-alert" style="display: none; margin-bottom: 20px; background: #fffbeb; border: 1px solid #fde68a; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 8px; font-size: 13px; color: #92400e;">
+                <strong>Endpoints changed:</strong> The selected source or destination node has changed. Click <strong>Compute Route</strong> to recalculate the optimal path.
+            </div>
+            {% if not route_result.found %}
+            <!-- ── Unreachable or Error State ───────────────────────────── -->
+            <section class="panel">
+                <div class="nw-empty">
+                    <span class="nw-empty-icon">⚠</span>
+                    <h3>No Path Available</h3>
+                    <p class="muted">{{ route_result.message }}</p>
+                    <p style="font-size: 12px; color: #8a9bac; margin-top: 8px;">
+                        Ensure active pipes connect the selected nodes and neither endpoint is inactive or isolated.
+                    </p>
+                </div>
+            </section>
+            {% else %}
+
+            <!-- ── Route Summary Metric Cards ──────────────────────────── -->
+            <section class="metrics" aria-label="Route Metrics" style="margin-bottom: 24px;">
+                <article class="metric">
+                    <p>Source Node</p>
+                    <h2 style="font-size: 20px;">#{{ route_result.source }}</h2>
+                    <span>
+                        {% for n in path_nodes if n.id == route_result.source %}
+                        {{ n.name }} ({{ n.node_type|capitalize }})
+                        {% endfor %}
+                    </span>
+                </article>
+
+                <article class="metric">
+                    <p>Destination Node</p>
+                    <h2 style="font-size: 20px;">#{{ route_result.destination }}</h2>
+                    <span>
+                        {% for n in path_nodes if n.id == route_result.destination %}
+                        {{ n.name }} ({{ n.node_type|capitalize }})
+                        {% endfor %}
+                    </span>
+                </article>
+
+                <article class="metric">
+                    <p>Total Routing Cost</p>
+                    <h2>{{ route_result.total_cost|round(2) }} <small style="font-size: 13px; font-weight: 500; color: #64748b;">units</small></h2>
+                    <span>Cumulative edge weight</span>
+                </article>
+
+                <article class="metric">
+                    <p>Path Topology</p>
+                    <h2>{{ route_result.pipe_ids|length }} <small>pipes</small></h2>
+                    <span>{{ route_result.node_path|length }} nodes traversed</span>
+                </article>
+            </section>
+
+
+
+            <!-- ── Visual Route Sequence ───────────────────────────────── -->
+            <section class="panel" style="margin-bottom: 24px;">
+                <div class="panel-heading">
+                    <div>
+                        <h3 style="font-size: 15px;">Optimal Route Sequence</h3>
+                        <p class="muted">Sequential path of nodes and active pipes selected by Dijkstra's algorithm.</p>
+                    </div>
+                    <span class="tag">{{ route_result.pipe_ids|length }} pipe segment{{ 's' if route_result.pipe_ids|length != 1 else '' }}</span>
+                </div>
+
+                <div class="traversal-sequence">
+                    {% for node in path_nodes %}
+                        <div class="step-node {% if loop.first %}is-root{% elif loop.last %}is-root{% endif %}">
+                            <span class="step-num">{{ loop.index }}</span>
+                            <span>{{ node.name }}</span>
+                            <span class="type-badge type-{{ node.node_type }}">{{ node.node_type }}</span>
+                        </div>
+                        {% if not loop.last %}
+                            {% set pipe = pipe_sequence[loop.index0] %}
+                            <div class="route-pipe-badge">
+                                <span>➔</span>
+                                <span>{{ pipe.name }} (cost: {{ pipe.cost }} units)</span>
+                                <span>➔</span>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </section>
+
+            <!-- ── Ordered Pipe Sequence Table ─────────────────────────── -->
+            <section class="panel" style="margin-bottom: 24px;">
+                <div class="panel-heading">
+                    <div>
+                        <h3 style="font-size: 15px;">Traversed Pipe Sequence</h3>
+                        <p class="muted">Active pipe connections chosen for the minimal routing cost.</p>
+                    </div>
+                    <span class="tag">{{ pipe_sequence|length }} pipes</span>
+                </div>
+
+                <div class="nw-table-wrap">
+                    <table class="nw-table">
+                        <thead>
+                            <tr>
+                                <th>Step</th>
+                                <th>Pipe ID</th>
+                                <th>Name</th>
+                                <th>From Node</th>
+                                <th>To Node</th>
+                                <th>Length (m)</th>
+                                <th>Capacity (L/min)</th>
+                                <th>Routing Cost (units)</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in pipe_sequence %}
+                            <tr>
+                                <td><span class="nw-id" style="font-weight: 800; color: #1a5fa8;">#{{ loop.index }}</span></td>
+                                <td><span class="nw-id">#{{ p.pipe_id }}</span></td>
+                                <td><span class="nw-name">{{ p.name }}</span></td>
+                                <td>
+                                    <span class="nw-name">#{{ p.from_node_id }}</span>
+                                    <span class="muted" style="font-size: 11px;">({{ node_map.get(p.from_node_id, '') }})</span>
+                                </td>
+                                <td>
+                                    <span class="nw-name">#{{ p.to_node_id }}</span>
+                                    <span class="muted" style="font-size: 11px;">({{ node_map.get(p.to_node_id, '') }})</span>
+                                </td>
+                                <td>{{ p.length_m }} m</td>
+                                <td>{{ p.capacity_lpm }} L/min</td>
+                                <td><strong style="color: #1a5fa8;">{{ p.cost }} units</strong></td>
+                                <td><span class="status-pill status-{{ p.status }}">{{ p.status }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ── Ordered Path Nodes Table ────────────────────────────── -->
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <h3 style="font-size: 15px;">Nodes on Route</h3>
+                        <p class="muted">Sequential list of physical distribution nodes along the path.</p>
+                    </div>
+                    <span class="tag">{{ path_nodes|length }} nodes</span>
+                </div>
+
+                <div class="nw-table-wrap">
+                    <table class="nw-table">
+                        <thead>
+                            <tr>
+                                <th>Step</th>
+                                <th>Node ID</th>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Location</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for n in path_nodes %}
+                            <tr>
+                                <td><span class="nw-id" style="font-weight: 800;">#{{ loop.index }}</span></td>
+                                <td><span class="nw-id">#{{ n.id }}</span></td>
+                                <td><span class="nw-name">{{ n.name }}</span></td>
+                                <td><span class="type-badge type-{{ n.node_type }}">{{ n.node_type }}</span></td>
+                                <td><span class="nw-location">{{ n.location or '—' }}</span></td>
+                                <td>
+                                    {% if loop.first %}
+                                    <span style="font-size: 10px; background: #e0f0ff; color: #1d4ed8; padding: 2px 7px; border-radius: 4px; font-weight: 800;">SOURCE</span>
+                                    {% elif loop.last %}
+                                    <span style="font-size: 10px; background: #ecfdf5; color: #047857; padding: 2px 7px; border-radius: 4px; font-weight: 800;">DESTINATION</span>
+                                    {% else %}
+                                    <span style="font-size: 10px; background: #f1f5f9; color: #475569; padding: 2px 7px; border-radius: 4px; font-weight: 600;">TRANSIT</span>
+                                    {% endif %}
+                                </td>
+                                <td><span class="status-pill status-{{ n.status }}">{{ n.status }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% endif %}
+
+    </main>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const sourceSelect = document.getElementById('source_id');
+            const destSelect = document.getElementById('destination_id');
+            const form = document.querySelector('.nw-form');
+            const resultsContainer = document.getElementById('route-results-container');
+            const outdatedNotice = document.getElementById('outdated-notice');
+
+            function handleEndpointChange() {
+                if (outdatedNotice) {
+                    outdatedNotice.style.display = 'block';
+                }
+                if (resultsContainer) {
+                    resultsContainer.style.opacity = '0.6';
+                    resultsContainer.style.filter = 'grayscale(30%)';
+                }
+            }
+
+            if (sourceSelect) {
+                sourceSelect.addEventListener('change', handleEndpointChange);
+            }
+            if (destSelect) {
+                destSelect.addEventListener('change', handleEndpointChange);
+            }
+
+            if (form) {
+                form.addEventListener('submit', function (e) {
+                    if (sourceSelect && destSelect && sourceSelect.value === destSelect.value) {
+                        e.preventDefault();
+                        alert("Source and destination must be different.");
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>
+

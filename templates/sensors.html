@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor Management | AquaGrid</title>
+    <meta name="description"
+        content="Manage water network telemetry sensors — register flow meters and pressure sensors on pipes in AquaGrid.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'sensors' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <!-- ── Top bar ─────────────────────────────────────────────────── -->
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">WATER INTELLIGENCE PLATFORM</p>
+                <h1>Sensor Management</h1>
+                <p class="muted">Register and monitor telemetry sensors (flow meters and pressure sensors) installed on water distribution pipes.</p>
+            </div>
+            <span class="status"><span></span> DATABASE BACKED</span>
+        </header>
+
+        <!-- ── Flash messages ──────────────────────────────────────────── -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-list" role="alert" aria-live="polite">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                <span class="flash-icon">{% if category == 'success' %}✓{% else %}⚠{% endif %}</span>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- ── Add Sensor form ─────────────────────────────────────────── -->
+        <section class="panel nw-form-panel" aria-labelledby="sensor-form-heading">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="sensor-form-heading">Register Sensor</h2>
+                    <p class="muted">All fields are required. Select a monitored pipe and specify the sensor type and measurement unit.</p>
+                </div>
+            </div>
+
+            <form method="POST" action="{{ url_for('sensors_create') }}" class="nw-form" novalidate id="add-sensor-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="form-row pipe-form-row-1">
+                    <div class="form-group">
+                        <label for="sensor_name">Sensor Name <span class="req">*</span></label>
+                        <input type="text" id="sensor_name" name="sensor_name" maxlength="120"
+                            placeholder="e.g. FM-Trunk-North-01" required autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pipe_id">Installed On Pipe <span class="req">*</span></label>
+                        <select id="pipe_id" name="pipe_id" required>
+                            <option value="" disabled selected>Select pipe…</option>
+                            {% for pid, label in pipe_map.items() %}
+                            <option value="{{ pid }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if not pipe_map %}
+                        <span class="field-hint">No pipes yet — <a href="/pipes">add pipes first</a>.</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sensor_type">Sensor Type <span class="req">*</span></label>
+                        <select id="sensor_type" name="sensor_type" required>
+                            <option value="flow_meter" selected>Flow Meter (flow_meter)</option>
+                            <option value="pressure_sensor">Pressure Sensor (pressure_sensor)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="unit">Measurement Unit <span class="req">*</span></label>
+                        <input type="text" id="unit" name="unit" maxlength="30"
+                            value="L/min" placeholder="e.g. L/min or psi" required autocomplete="off">
+                        <span class="field-hint">e.g. L/min, m³/h for flow · psi, bar for pressure</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sensor_status">Status <span class="req">*</span></label>
+                        <select id="sensor_status" name="status" required>
+                            {% for s in allowed_statuses %}
+                            <option value="{{ s }}" {% if s == 'active' %}selected{% endif %}>{{ s | capitalize }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="primary-button nw-submit-btn" id="add-sensor-btn">
+                    ＋ Register Sensor
+                </button>
+            </form>
+        </section>
+
+        <!-- ── Sensors Table ───────────────────────────────────────────── -->
+        <section class="panel nw-table-panel" aria-labelledby="sensors-table-heading">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="sensors-table-heading">Registered Sensors</h2>
+                    <p class="muted">
+                        {% if sensors %}
+                        {{ sensors | length }} sensor{{ 's' if sensors | length != 1 else '' }} registered across the network
+                        {% else %}
+                        No sensors registered yet.
+                        {% endif %}
+                    </p>
+                </div>
+                <span class="tag">{{ sensors | length }} total</span>
+            </div>
+
+            {% if sensors %}
+            <div class="table-wrap">
+                <table class="nw-table" id="sensors-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Sensor Name</th>
+                            <th>Type</th>
+                            <th>Monitored Pipe</th>
+                            <th>Unit</th>
+                            <th>Status</th>
+                            <th>Registered</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sensor in sensors %}
+                        <tr>
+                            <td class="nw-id">#{{ sensor.sensor_id }}</td>
+                            <td class="nw-name"><strong>{{ sensor.sensor_name }}</strong></td>
+                            <td>
+                                <span class="type-badge type-{{ sensor.sensor_type }}">
+                                    {% if sensor.sensor_type == 'flow_meter' %}Flow Meter{% elif sensor.sensor_type == 'pressure_sensor' %}Pressure Sensor{% else %}{{ sensor.sensor_type }}{% endif %}
+                                </span>
+                            </td>
+                            <td class="pipe-node-cell">
+                                <span class="pipe-node-tag" title="Pipe #{{ sensor.pipe_id }}: {{ sensor.from_node_name }} → {{ sensor.to_node_name }}">
+                                    #{{ sensor.pipe_id }} {{ sensor.pipe_name }}
+                                </span>
+                            </td>
+                            <td><strong style="color: #1a5fa8;">{{ sensor.unit }}</strong></td>
+                            <td>
+                                <span class="status-pill status-{{ sensor.status }}">
+                                    {{ sensor.status | capitalize }}
+                                </span>
+                            </td>
+                            <td class="nw-date">{{ sensor.created_at[:10] }}</td>
+                            <td class="nw-actions">
+                                <a href="{{ url_for('sensors_edit', sensor_id=sensor.sensor_id) }}" class="action-btn edit-btn" id="edit-sensor-{{ sensor.sensor_id }}">Edit</a>
+
+                                <!-- Activate / Deactivate Toggle -->
+                                <form method="POST" action="{{ url_for('sensors_toggle_status', sensor_id=sensor.sensor_id) }}" class="inline-form" id="toggle-sensor-form-{{ sensor.sensor_id }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="action-btn toggle-btn" id="toggle-sensor-{{ sensor.sensor_id }}" title="Toggle between active and inactive">
+                                        {% if sensor.status == 'active' %}Deactivate{% else %}Activate{% endif %}
+                                    </button>
+                                </form>
+
+                                <!-- Delete – POST only -->
+                                <form method="POST" action="{{ url_for('sensors_delete', sensor_id=sensor.sensor_id) }}" class="inline-form" id="delete-sensor-form-{{ sensor.sensor_id }}" onsubmit="return confirm('Delete sensor \'{{ sensor.sensor_name }}\'? This cannot be undone.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="action-btn delete-btn" id="delete-sensor-{{ sensor.sensor_id }}">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="nw-empty">
+                <span class="nw-empty-icon">📡</span>
+                <p>No sensors registered yet.</p>
+                <p class="muted">Use the form above to register your first flow meter or pressure sensor.</p>
+                {% if not pipe_map %}
+                <p class="muted"><a href="/pipes">Register at least one pipe</a> before adding sensors.</p>
+                {% endif %}
+            </div>
+            {% endif %}
+        </section>
+
+        <footer>
+            AQUAGRID · MCA PROJECT PROTOTYPE · SENSOR MANAGEMENT · TELEMETRY SENSORS FOR WATER DISTRIBUTION MONITORING
+        </footer>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const typeSelect = document.getElementById('sensor_type');
+            const unitInput = document.getElementById('unit');
+            if (typeSelect && unitInput) {
+                typeSelect.addEventListener('change', function() {
+                    if (typeSelect.value === 'flow_meter' && (unitInput.value === 'psi' || unitInput.value === 'bar' || !unitInput.value)) {
+                        unitInput.value = 'L/min';
+                    } else if (typeSelect.value === 'pressure_sensor' && (unitInput.value === 'L/min' || unitInput.value === 'm³/h' || !unitInput.value)) {
+                        unitInput.value = 'psi';
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+
+</html>

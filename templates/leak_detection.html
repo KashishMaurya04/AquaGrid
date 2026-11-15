@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leak Detection Engine | AquaGrid</title>
+    <meta name="description"
+        content="Explainable sliding-window hydraulic anomaly detection for municipal water networks in AquaGrid.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/graph.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'leak_detection' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <!-- ── Top bar ─────────────────────────────────────────────────── -->
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">HYDRAULIC ANOMALY DETECTION · SLIDING-WINDOW ENGINE</p>
+                <h1>Leak Detection Engine</h1>
+                <p class="muted">Statistical sliding-window anomaly analysis identifying suspicious flow surges and pressure drops across distribution pipes.</p>
+            </div>
+            <span class="status"><span></span> ANOMALY MONITORING</span>
+        </header>
+
+        <!-- ── Flash messages ──────────────────────────────────────────── -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-list" role="alert" aria-live="polite">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                <span class="flash-icon">{% if category == 'success' %}✓{% else %}⚠{% endif %}</span>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- ── Simulation Disclaimer Banner ────────────────────────────── -->
+        <section class="simulation-banner" role="region" aria-label="Detection Notice">
+            <span class="sim-icon">⚠</span>
+            <div>
+                <div class="sim-title">Hydraulic Anomaly Simulation Notice</div>
+                <p class="sim-text">
+                    All anomaly events and metrics shown here are generated from statistical sliding-window algorithms operating on synthetic telemetry data.
+                    Statistical anomaly flags (z-scores and window deviations) reflect mathematical threshold exceedances and do not represent verified physical structural pipe failures or calibrated real-world failure probabilities.
+                </p>
+            </div>
+        </section>
+
+        <!-- ── Summary Cards ───────────────────────────────────────────── -->
+        <section class="metrics" aria-label="Leak Detection Metrics" style="margin-bottom: 24px;">
+            <article class="metric">
+                <p>Suspected Leak Events</p>
+                <h2 id="open-leak-count" style="color: {% if open_count > 0 %}#dc2626{% else %}#059669{% endif %};">
+                    {{ open_count }}
+                </h2>
+                <span>{{ investigating_pipes_count }} pipe{{ 's' if investigating_pipes_count != 1 else '' }} under active investigation</span>
+            </article>
+
+            <article class="metric">
+                <p>Network Health Status</p>
+                <h2>
+                    {% if anomalous_pipes_count > 0 %}
+                    <span style="color: #dc2626;">⚠ Anomalous</span>
+                    {% elif normal_pipes_count > 0 and insufficient_pipes_count == 0 %}
+                    <span style="color: #059669;">✓ Normal</span>
+                    {% elif normal_pipes_count > 0 and insufficient_pipes_count > 0 %}
+                    <span style="color: #d97706;">⚠ Partial Data</span>
+                    {% else %}
+                    <span style="color: #64748b;">Insufficient Data</span>
+                    {% endif %}
+                </h2>
+                <span>{{ normal_pipes_count }} normal · {{ anomalous_pipes_count }} leak · {{ insufficient_pipes_count }} pending</span>
+            </article>
+
+            <article class="metric">
+                <p>Total Readings Evaluated</p>
+                <h2>{{ total_readings }}</h2>
+                <span>Sliding-window observation buffer</span>
+            </article>
+
+            <article class="metric">
+                <p>Cumulative Events Recorded</p>
+                <h2>{{ total_events }}</h2>
+                <span>Historical records in SQLite</span>
+            </article>
+        </section>
+
+        <!-- ── Execution Action Panel ───────────────────────────────────── -->
+        <section class="panel graph-controls-panel" aria-labelledby="controls-heading">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="controls-heading" style="font-size: 16px; margin-bottom: 4px;">Run Anomaly Detection Engine</h2>
+                    <p class="muted">Analyzes historical baselines vs recent sliding windows for all monitored distribution pipes.</p>
+                </div>
+                <span class="tag">Window: 5 samples · min 3 consecutive</span>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; padding-top: 6px;">
+                <form method="POST" action="{{ url_for('leak_detection_run') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="primary-button" id="btn-run-detection" style="padding: 11px 22px; font-weight: 700; font-size: 14px;">
+                        🔍 Run Anomaly Detection
+                    </button>
+                </form>
+
+                <div style="font-size: 12px; color: #64748b; line-height: 1.5; max-width: 580px;">
+                    <strong>Algorithm Criteria:</strong> Flags a suspected leak when flow surges &ge; +25% (z &ge; +2.5) and/or pressure drops &ge; -20% (z &le; -2.0) across &ge; 3 consecutive sliding-window observations. Baselines are established strictly from verified normal scenario readings (min 5 samples), excluding leak telemetry and unknown-provenance data.
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Pipe Diagnostics Table ───────────────────────────────────── -->
+        <section class="panel nw-table-panel" aria-labelledby="pipes-table-heading">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="pipes-table-heading">Monitored Pipes Diagnostic Overview</h2>
+                    <p class="muted">Live sliding-window evaluation per active pipe. Compares recent window averages against established statistical baselines.</p>
+                </div>
+                <span class="tag">{{ diagnostics|length }} pipes evaluated</span>
+            </div>
+
+            {% if diagnostics %}
+            <div class="table-wrap">
+                <table class="nw-table" id="pipes-diagnostics-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Pipe Name</th>
+                            <th>Span</th>
+                            <th>Flow Telemetry</th>
+                            <th>Pressure Telemetry</th>
+                            <th>Status</th>
+                            <th>Severity</th>
+                            <th>Evidence & Explanation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in diagnostics %}
+                        <tr style="{% if d.status == 'suspected_leak' %}background: #fff5f5;{% endif %}">
+                            <td class="nw-id">#{{ d.pipe_id }}</td>
+                            <td class="nw-name"><strong>{{ d.pipe_name }}</strong></td>
+                            <td class="pipe-node-cell">
+                                <span class="pipe-node-tag">{{ d.from_node_name }} → {{ d.to_node_name }}</span>
+                            </td>
+
+                            <!-- Flow Telemetry -->
+                            <td>
+                                {% if d.flow_result and d.flow_result.classification != 'insufficient_data' and d.flow_result.classification != 'inactive' %}
+                                    <div style="font-size: 13px;">
+                                        <strong>{{ d.observed_flow }}</strong> {{ d.flow_unit }}
+                                        <span style="font-size: 11px; color: #64748b;" title="Observation window sample count">(win={{ d.flow_result.window_samples }})</span>
+                                    </div>
+                                    <div style="font-size: 11px; color: #475569; margin-top: 2px;">
+                                        Base: <strong>{{ d.baseline_flow }}</strong> {{ d.flow_unit }}
+                                        <span style="color: #64748b;" title="Verified normal baseline sample count">(n={{ d.flow_result.baseline_samples }})</span>
+                                    </div>
+                                    <div style="font-size: 11px; color: #64748b;">
+                                        z-score: <strong>{{ '%+.2f'|format(d.flow_score) }}</strong>
+                                        {% if d.flow_result.deviation_ratio %}
+                                            ({{ '%+.1f'|format((d.flow_result.deviation_ratio - 1.0) * 100) }}%)
+                                        {% endif %}
+                                    </div>
+                                {% elif d.flow_result and d.flow_result.classification == 'insufficient_data' %}
+                                    <div>
+                                        <span class="status-pill" style="background: #f1f5f9; color: #64748b; font-size: 11px; padding: 2px 6px;">
+                                            Insufficient Data
+                                        </span>
+                                    </div>
+                                    {% if d.observed_flow is not none %}
+                                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
+                                        Current: <strong>{{ d.observed_flow }}</strong> {{ d.flow_unit }} (win={{ d.flow_result.window_samples }})
+                                    </div>
+                                    {% endif %}
+                                    <div style="font-size: 10px; color: #94a3b8; line-height: 1.3; margin-top: 2px;" title="{{ d.flow_result.evidence }}">
+                                        n={{ d.flow_result.baseline_samples }}/{{ d.flow_result.threshold_used }} normal samples
+                                    </div>
+                                {% elif d.flow_result and d.flow_result.classification == 'inactive' %}
+                                    <span style="color: #94a3b8; font-size: 12px;">(Inactive meter)</span>
+                                {% else %}
+                                    <span style="color: #94a3b8; font-size: 12px;">— (No meter)</span>
+                                {% endif %}
+                            </td>
+
+                            <!-- Pressure Telemetry -->
+                            <td>
+                                {% if d.pressure_result and d.pressure_result.classification != 'insufficient_data' and d.pressure_result.classification != 'inactive' %}
+                                    <div style="font-size: 13px;">
+                                        <strong>{{ d.observed_pressure }}</strong> {{ d.pressure_unit }}
+                                        <span style="font-size: 11px; color: #64748b;" title="Observation window sample count">(win={{ d.pressure_result.window_samples }})</span>
+                                    </div>
+                                    <div style="font-size: 11px; color: #475569; margin-top: 2px;">
+                                        Base: <strong>{{ d.baseline_pressure }}</strong> {{ d.pressure_unit }}
+                                        <span style="color: #64748b;" title="Verified normal baseline sample count">(n={{ d.pressure_result.baseline_samples }})</span>
+                                    </div>
+                                    <div style="font-size: 11px; color: #64748b;">
+                                        z-score: <strong>{{ '%+.2f'|format(d.pressure_score) }}</strong>
+                                        {% if d.pressure_result.deviation_ratio %}
+                                            ({{ '%+.1f'|format((d.pressure_result.deviation_ratio - 1.0) * 100) }}%)
+                                        {% endif %}
+                                    </div>
+                                {% elif d.pressure_result and d.pressure_result.classification == 'insufficient_data' %}
+                                    <div>
+                                        <span class="status-pill" style="background: #f1f5f9; color: #64748b; font-size: 11px; padding: 2px 6px;">
+                                            Insufficient Data
+                                        </span>
+                                    </div>
+                                    {% if d.observed_pressure is not none %}
+                                    <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
+                                        Current: <strong>{{ d.observed_pressure }}</strong> {{ d.pressure_unit }} (win={{ d.pressure_result.window_samples }})
+                                    </div>
+                                    {% endif %}
+                                    <div style="font-size: 10px; color: #94a3b8; line-height: 1.3; margin-top: 2px;" title="{{ d.pressure_result.evidence }}">
+                                        n={{ d.pressure_result.baseline_samples }}/{{ d.pressure_result.threshold_used }} normal samples
+                                    </div>
+                                {% elif d.pressure_result and d.pressure_result.classification == 'inactive' %}
+                                    <span style="color: #94a3b8; font-size: 12px;">(Inactive sensor)</span>
+                                {% else %}
+                                    <span style="color: #94a3b8; font-size: 12px;">— (No sensor)</span>
+                                {% endif %}
+                            </td>
+
+                            <!-- Status Pill -->
+                            <td>
+                                {% if d.status == 'suspected_leak' %}
+                                    <span class="status-pill" style="background: #fee2e2; color: #991b1b; font-weight: 700; border: 1px solid #fecaca;">
+                                        ⚠ Suspected Leak
+                                    </span>
+                                {% elif d.status == 'normal' %}
+                                    <span class="status-pill status-active" style="background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;">
+                                        ✓ Normal
+                                    </span>
+                                {% else %}
+                                    <span class="status-pill" style="background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0;">
+                                        Insufficient Data
+                                    </span>
+                                {% endif %}
+                            </td>
+
+                            <!-- Severity -->
+                            <td>
+                                {% if d.status == 'suspected_leak' %}
+                                    <span class="severity {% if d.severity in ['high', 'critical'] %}severity-high{% else %}severity-medium{% endif %}">
+                                        {{ d.severity|upper }}
+                                    </span>
+                                {% else %}
+                                    <span style="color: #94a3b8; font-size: 12px;">—</span>
+                                {% endif %}
+                            </td>
+
+                            <!-- Evidence Description -->
+                            <td style="font-size: 12px; color: #334155; max-width: 380px; line-height: 1.4;">
+                                {{ d.evidence }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="nw-empty">
+                <span class="nw-empty-icon">⌘</span>
+                <p>No pipes found in the water network.</p>
+                <p class="muted"><a href="/pipes">Register pipes</a> and sensors to enable anomaly detection.</p>
+            </div>
+            {% endif %}
+        </section>
+
+        <!-- ── Leak Events History Table ────────────────────────────────── -->
+        <section class="panel nw-table-panel" aria-labelledby="events-table-heading" style="margin-top: 28px;">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="events-table-heading">Suspected Leak Events Log</h2>
+                    <p class="muted">Permanent record of detected anomalies stored in SQLite. Update event lifecycle status as investigations proceed.</p>
+                </div>
+                <span class="tag">{{ all_events|length }} logged events</span>
+            </div>
+
+            {% if all_events %}
+            <div class="table-wrap">
+                <table class="nw-table" id="leak-events-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Detected At</th>
+                            <th>Monitored Pipe</th>
+                            <th>Severity</th>
+                            <th>Status & Lifecycle Action</th>
+                            <th>Baseline vs Observed</th>
+                            <th>Evidence Description</th>
+                            <th>Classification</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for event in all_events %}
+                        <tr>
+                            <td class="nw-id">#{{ event.event_id }}</td>
+                            <td class="nw-date">{{ event.detected_at[:19].replace('T', ' ') }}</td>
+                            <td class="pipe-node-cell">
+                                <span class="pipe-node-tag" title="Pipe #{{ event.pipe_id }}: {{ event.from_node_name }} → {{ event.to_node_name }}">
+                                    #{{ event.pipe_id }} {{ event.pipe_name }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="severity {% if event.severity in ['high', 'critical'] %}severity-high{% else %}severity-medium{% endif %}">
+                                    {{ event.severity|upper }}
+                                </span>
+                            </td>
+
+                            <!-- Status & Action Form -->
+                            <td>
+                                <form method="POST" action="{{ url_for('leak_detection_update_status', event_id=event.event_id) }}" class="inline-form" style="display:inline-flex; align-items:center; gap:6px;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <select name="status" style="padding: 4px 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; font-weight: 600;">
+                                        {% for s in allowed_statuses %}
+                                        <option value="{{ s }}" {% if event.status == s %}selected{% endif %}>
+                                            {{ s|capitalize }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="action-btn" style="padding: 4px 8px; font-size: 11px;">Save</button>
+                                </form>
+                            </td>
+
+                            <!-- Metrics -->
+                            <td style="font-size: 12px; line-height: 1.4;">
+                                <div><span style="color: #64748b;">Observed:</span> <strong>{{ event.observed_values or '—' }}</strong></div>
+                                <div><span style="color: #64748b;">Baseline:</span> {{ event.baseline_values or '—' }}</div>
+                            </td>
+
+                            <!-- Evidence -->
+                            <td style="font-size: 12px; color: #334155; max-width: 320px; line-height: 1.4;">
+                                {{ event.evidence_description }}
+                            </td>
+
+                            <!-- Simulated Flag -->
+                            <td>
+                                {% if event.is_simulated %}
+                                    <span class="status-pill status-active" style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;">
+                                        Synthetic
+                                    </span>
+                                {% else %}
+                                    <span class="status-pill status-active">Live</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="nw-empty">
+                <span class="nw-empty-icon">✓</span>
+                <p>No leak events recorded yet.</p>
+                <p class="muted">Run anomaly detection above after generating telemetry with the Sensor Simulator.</p>
+            </div>
+            {% endif %}
+        </section>
+
+        <footer>
+            AQUAGRID · MCA PROJECT PROTOTYPE · LEAK DETECTION ENGINE · ALL EVENTS ARE DERIVED FROM SYNTHETIC DEMONSTRATION DATA
+        </footer>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>
+

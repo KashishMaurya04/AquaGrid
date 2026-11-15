@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Distribution | AquaGrid</title>
+    <meta name="description" content="Network-aware water delivery feasibility analysis and conduit bottleneck assessment.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/graph.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/allocation.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/distribution.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'distribution' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <!-- ── Top bar ─────────────────────────────────────────────────── -->
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">NETWORK-AWARE WATER DISTRIBUTION OPTIMIZATION</p>
+                <h1>Distribution Dashboard</h1>
+                <p class="muted">Evaluate physical conduit capacity, bottleneck flow, and delivery feasibility across the pipe network.</p>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <a href="#configure-assessment" class="btn btn-primary" id="btn-new-assessment">+ New Assessment</a>
+            </div>
+        </header>
+
+        <!-- ── Flash messages ──────────────────────────────────────────── -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-list" role="alert" aria-live="polite">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                <span class="flash-icon">{% if category == 'success' %}✓{% elif category == 'warning' %}⚠{% else %}✕{% endif %}</span>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- ── Simulation Disclaimer Banner ───────────────────── -->
+        <section class="simulation-banner" role="region" aria-label="Distribution Modeling Notice" style="margin-bottom: 24px;">
+            <span class="sim-icon">🌊</span>
+            <div>
+                <div class="sim-title">Network-Aware Water Distribution Optimization Notice</div>
+                <p class="sim-text">
+                    This module evaluates physical delivery feasibility across pipe conduits under maximum capacity constraints using graph algorithms (Dijkstra Shortest-Path &amp; Priority-Queue Widest-Path). It simulates steady-state conduit flow and does not perform dynamic multi-commodity pressure or transient wave hydraulic modeling. Historical assessment records preserve immutable snapshots captured at assessment time.
+                </p>
+            </div>
+        </section>
+
+        <!-- ── Assessment Configuration Form ────────────────────────────── -->
+        <section class="card" id="configure-assessment" style="margin-bottom: 24px;">
+            <h2 style="font-size: 16px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                <span>⚙</span> Run Distribution Feasibility Assessment
+            </h2>
+            <p class="muted" style="margin-bottom: 16px; font-size: 13px;">
+                Select an existing fair water allocation run, designate a supply reservoir source node, configure delivery duration, and select a network pathfinding strategy.
+            </p>
+
+            {% if not historical_runs %}
+            <div class="empty-state" style="padding: 24px; text-align: center; background: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1;">
+                <p style="font-size: 14px; color: #475569; margin-bottom: 8px;">No allocation runs exist yet to evaluate.</p>
+                <a href="{{ url_for('allocation') }}" class="btn btn-secondary">Go to Fair Water Allocation →</a>
+            </div>
+            {% else %}
+            <form action="{{ url_for('distribution_run') }}" method="POST" id="form-run-distribution">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 16px;">
+                    <div>
+                        <label for="allocation_run_id" style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #334155;">
+                            Fair Water Allocation Run <span style="color: #dc2626;">*</span>
+                        </label>
+                        <select name="allocation_run_id" id="allocation_run_id" class="form-control" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                            {% for r in historical_runs %}
+                            <option value="{{ r['run_id'] }}" {% if selected_run_id == r['run_id'] %}selected{% endif %}>
+                                Run #{{ r['run_id'] }} · {{ r['run_timestamp'] }} · {{ "{:,.0f}".format(r['total_allocated_l']) }} L ({{ r['allocation_policy'] }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="source_node_id" style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #334155;">
+                            Water Supply Source Node <span style="color: #dc2626;">*</span>
+                        </label>
+                        <select name="source_node_id" id="source_node_id" class="form-control" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                            {% for n in active_sources %}
+                            <option value="{{ n['id'] }}">
+                                #{{ n['id'] }} · {{ n['name'] }} ({{ n['node_type']|upper }}{% if n['location'] %}, {{ n['location'] }}{% endif %})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="duration_minutes" style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #334155;">
+                            Delivery Window (Minutes) <span style="color: #dc2626;">*</span>
+                        </label>
+                        <input type="number" step="any" min="0.1" name="duration_minutes" id="duration_minutes" value="60" class="form-control" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                    </div>
+
+                    <div>
+                        <label for="routing_strategy" style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #334155;">
+                            Pathfinding Routing Strategy <span style="color: #dc2626;">*</span>
+                        </label>
+                        <select name="routing_strategy" id="routing_strategy" class="form-control" required style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                            <option value="SHORTEST_PATH" selected>SHORTEST_PATH (Minimize distance &amp; transit cost)</option>
+                            <option value="WIDEST_PATH">WIDEST_PATH (Maximize conduit bottleneck capacity)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 16px;">
+                    <label for="notes" style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; color: #334155;">
+                        Assessment Notes / Dispatch Scenario (Optional)
+                    </label>
+                    <input type="text" name="notes" id="notes" placeholder="e.g., Morning peak hours network evaluation" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                </div>
+
+                <div style="display: flex; justify-content: flex-end;">
+                    <button type="submit" class="btn btn-primary" id="btn-submit-assessment" style="padding: 9px 20px;">
+                        ▶ Evaluate &amp; Record Distribution
+                    </button>
+                </div>
+            </form>
+            {% endif %}
+        </section>
+
+        <!-- ── Latest Assessment Summary & Metrics ─────────────────────── -->
+        {% if latest_assessment %}
+        <section style="margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
+                <div>
+                    <h2 style="font-size: 18px; color: #0f172a; margin-bottom: 2px;">
+                        Latest Feasibility Assessment Result
+                        <span class="strategy-badge {% if latest_assessment['routing_strategy'] == 'WIDEST_PATH' %}strategy-widest{% else %}strategy-shortest{% endif %}">
+                            {{ latest_assessment['routing_strategy'] }}
+                        </span>
+                    </h2>
+                    <p class="muted" style="font-size: 13px;">
+                        Assessment #{{ latest_assessment['assessment_id'] }} for Allocation Run #{{ latest_assessment['run_id'] }} · Evaluated from Source <strong>{{ latest_assessment['source_node_name'] }}</strong> over {{ latest_assessment['duration_minutes'] }} min window.
+                    </p>
+                </div>
+                <a href="{{ url_for('distribution_assessment_details', assessment_id=latest_assessment['assessment_id']) }}" class="btn btn-secondary" style="font-size: 12.5px;">
+                    View Detailed Historical Report →
+                </a>
+            </div>
+
+            <!-- Summary KPI Cards -->
+            <div class="metrics" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 20px;">
+                <article class="metric">
+                    <p>Total Allocated Water</p>
+                    <h2 style="color: #0284c7;">
+                        {{ "{:,.2f}".format(latest_assessment['total_allocated_l']) }} <small style="font-size: 13px; font-weight: normal;">L</small>
+                    </h2>
+                    <span>Entitlement across zones</span>
+                </article>
+
+                <article class="metric">
+                    <p>Total Deliverable Volume</p>
+                    <h2 style="color: #16a34a;">
+                        {{ "{:,.2f}".format(latest_assessment['total_deliverable_l']) }} <small style="font-size: 13px; font-weight: normal;">L</small>
+                    </h2>
+                    <span>Physical conduit limit</span>
+                </article>
+
+                <article class="metric">
+                    <p>Total Undelivered Deficit</p>
+                    <h2 style="color: {% if latest_assessment['total_undelivered_l'] > 0 %}#dc2626{% else %}#16a34a{% endif %};">
+                        {{ "{:,.2f}".format(latest_assessment['total_undelivered_l']) }} <small style="font-size: 13px; font-weight: normal;">L</small>
+                    </h2>
+                    <span>
+                        {% if latest_assessment['total_undelivered_l'] > 0 %}Conduit capacity bottleneck{% else %}100% deliverable{% endif %}
+                    </span>
+                </article>
+
+                <article class="metric">
+                    <p>Delivery Efficiency</p>
+                    <h2 style="color: {% if latest_assessment['delivery_efficiency_pct'] >= 99.9 %}#16a34a{% elif latest_assessment['delivery_efficiency_pct'] >= 75 %}#0284c7{% elif latest_assessment['delivery_efficiency_pct'] >= 50 %}#d97706{% else %}#dc2626{% endif %};">
+                        {{ "{:.1f}".format(latest_assessment['delivery_efficiency_pct']) }}%
+                    </h2>
+                    <span>Deliverable / Allocated</span>
+                </article>
+            </div>
+
+            <!-- Shared-Pipe Contention Warning Banner (if present) -->
+            {% if latest_assessment['has_contention'] or latest_contention_warnings %}
+            <aside class="contention-banner" role="alert" id="contention-warning-banner">
+                <div class="contention-icon">⚠</div>
+                <div>
+                    <div class="contention-title">Shared-Pipe Capacity Contention Detected</div>
+                    <div class="contention-body">
+                        Notice: Multiple zone delivery routes share the same physical pipe conduits. The aggregate flow required simultaneously exceeds individual conduit capacities.
+                        <strong>Do not present independently calculated zone deliveries as jointly feasible when a shared-pipe warning indicates aggregate capacity contention.</strong>
+                    </div>
+                    {% if latest_contention_warnings %}
+                    <ul class="contention-list">
+                        {% for w in latest_contention_warnings %}
+                        <li>
+                            <strong>Pipe #{{ w['pipe_id'] }} ('{{ w['pipe_name'] }}')</strong>: Conduit capacity is <strong>{{ "{:,.1f}".format(w['pipe_capacity_lpm'] or 0) }} L/min</strong>, but concurrent delivery across zones ({{ (w['affected_zone_names'] or [])|join(', ') }}) requires <strong>{{ "{:,.1f}".format(w['aggregate_required_lpm'] or 0) }} L/min</strong> (excess demand deficit: <strong>{{ "{:,.1f}".format(w['excess_demand_lpm'] or 0) }} L/min</strong>). Sequential dispatch or non-conflicting schedules required.
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+            </aside>
+            {% endif %}
+
+            <!-- Zone-Level Assessment Table -->
+            <div class="card" style="margin-bottom: 24px; overflow-x: auto;">
+                <h3 style="font-size: 15px; margin-bottom: 12px; color: #0f172a;">Zone Feasibility Assessment Breakdown</h3>
+                <table class="table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #e2e8f0; text-align: left; color: #475569;">
+                            <th style="padding: 10px 8px;">Zone Name (Snapshot)</th>
+                            <th style="padding: 10px 8px;">Destination Node</th>
+                            <th style="padding: 10px 8px; text-align: right;">Allocated</th>
+                            <th style="padding: 10px 8px; text-align: right;">Req. Rate</th>
+                            <th style="padding: 10px 8px; text-align: right;">Bottleneck</th>
+                            <th style="padding: 10px 8px; text-align: right;">Deliverable</th>
+                            <th style="padding: 10px 8px; text-align: right;">Undelivered</th>
+                            <th style="padding: 10px 8px; text-align: center;">Efficiency</th>
+                            <th style="padding: 10px 8px; text-align: center;">Feasibility Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for z in latest_zones %}
+                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding: 10px 8px; font-weight: 600; color: #0f172a;">
+                                {{ z['zone_name'] }}
+                            </td>
+                            <td style="padding: 10px 8px;">
+                                {% if z['destination_node_name'] %}
+                                    <span class="route-node-pill dest">{{ z['destination_node_name'] }}</span>
+                                {% else %}
+                                    <span style="color: #6d28d9; font-style: italic;">Unmapped (None)</span>
+                                {% endif %}
+                            </td>
+                            <td style="padding: 10px 8px; text-align: right;">
+                                {{ "{:,.1f}".format(z['allocated_amount_l']) }} L
+                            </td>
+                            <td style="padding: 10px 8px; text-align: right; color: #475569;">
+                                {{ "{:,.1f}".format(z['required_rate_lpm']) }} L/m
+                            </td>
+                            <td style="padding: 10px 8px; text-align: right;">
+                                {% if z['bottleneck_capacity_lpm'] is not none %}
+                                    <span class="bottleneck-highlight">
+                                        {{ "{:,.1f}".format(z['bottleneck_capacity_lpm']) }} L/m
+                                    </span>
+                                {% else %}
+                                    <span class="muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td style="padding: 10px 8px; text-align: right; font-weight: 600; color: #16a34a;">
+                                {{ "{:,.1f}".format(z['deliverable_amount_l']) }} L
+                            </td>
+                            <td style="padding: 10px 8px; text-align: right; font-weight: 600; color: {% if z['undelivered_amount_l'] > 0 %}#dc2626{% else %}#16a34a{% endif %};">
+                                {{ "{:,.1f}".format(z['undelivered_amount_l']) }} L
+                            </td>
+                            <td style="padding: 10px 8px; text-align: center;">
+                                <div class="meter-bg">
+                                    <div class="meter-fill {% if z['delivery_efficiency_pct'] >= 99.9 %}green{% elif z['delivery_efficiency_pct'] >= 50 %}amber{% else %}red{% endif %}" style="width: {{ z['delivery_efficiency_pct'] }}%;"></div>
+                                </div>
+                                <span style="font-size: 11px; font-weight: 600;">{{ "{:.0f}".format(z['delivery_efficiency_pct']) }}%</span>
+                            </td>
+                            <td style="padding: 10px 8px; text-align: center;">
+                                <span class="feasibility-badge feasibility-{{ z['feasibility_status']|lower }}">
+                                    {{ z['feasibility_status'] }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- ── Historical Assessments List ─────────────────────────────── -->
+        <section class="card" style="margin-bottom: 30px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                <h3 style="font-size: 16px; margin: 0; color: #0f172a;">Recorded Delivery Feasibility Assessments</h3>
+                <span class="muted" style="font-size: 12.5px;">{{ recent_assessments|length }} assessment(s) recorded</span>
+            </div>
+
+            {% if not recent_assessments %}
+            <div class="empty-state" style="padding: 24px; text-align: center; color: #64748b;">
+                <p>No distribution assessments have been performed yet. Configure parameters above to run an evaluation.</p>
+            </div>
+            {% else %}
+            <div style="overflow-x: auto;">
+                <table class="table" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #e2e8f0; text-align: left; color: #475569;">
+                            <th style="padding: 10px 8px;">ID</th>
+                            <th style="padding: 10px 8px;">Run ID</th>
+                            <th style="padding: 10px 8px;">Source Node</th>
+                            <th style="padding: 10px 8px;">Strategy</th>
+                            <th style="padding: 10px 8px;">Duration</th>
+                            <th style="padding: 10px 8px; text-align: right;">Deliverable / Allocated</th>
+                            <th style="padding: 10px 8px; text-align: center;">Efficiency</th>
+                            <th style="padding: 10px 8px; text-align: center;">Contention</th>
+                            <th style="padding: 10px 8px;">Assessed At</th>
+                            <th style="padding: 10px 8px; text-align: right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in recent_assessments %}
+                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                            <td style="padding: 10px 8px; font-weight: bold; color: #0f172a;">#{{ a['assessment_id'] }}</td>
+                            <td style="padding: 10px 8px;">
+                                <a href="{{ url_for('distribution_run_history', run_id=a['run_id']) }}" style="color: #0284c7; text-decoration: none; font-weight: 600;">
+                                    Run #{{ a['run_id'] }}
+                                </a>
+                            </td>
+                            <td style="padding: 10px 8px;">{{ a['source_node_name'] }}</td>
+                            <td style="padding: 10px 8px;">
+                                <span class="strategy-badge {% if a['routing_strategy'] == 'WIDEST_PATH' %}strategy-widest{% else %}strategy-shortest{% endif %}">
+                                    {{ a['routing_strategy'] }}
+                                </span>
+                            </td>
+                            <td style="padding: 10px 8px;">{{ a['duration_minutes'] }} min</td>
+                            <td style="padding: 10px 8px; text-align: right;">
+                                <strong>{{ "{:,.0f}".format(a['total_deliverable_l']) }}</strong> / {{ "{:,.0f}".format(a['total_allocated_l']) }} L
+                            </td>
+                            <td style="padding: 10px 8px; text-align: center; font-weight: 600; color: {% if a['delivery_efficiency_pct'] >= 99.9 %}#16a34a{% elif a['delivery_efficiency_pct'] >= 50 %}#d97706{% else %}#dc2626{% endif %};">
+                                {{ "{:.1f}".format(a['delivery_efficiency_pct']) }}%
+                            </td>
+                            <td style="padding: 10px 8px; text-align: center;">
+                                {% if a['has_contention'] %}
+                                    <span style="color: #d97706; font-weight: 700;">⚠ Contention</span>
+                                {% else %}
+                                    <span style="color: #16a34a;">✓ Clear</span>
+                                {% endif %}
+                            </td>
+                            <td style="padding: 10px 8px; color: #64748b; font-size: 12px;">{{ a['assessed_at'][:19].replace('T', ' ') }}</td>
+                            <td style="padding: 10px 8px; text-align: right;">
+                                <a href="{{ url_for('distribution_assessment_details', assessment_id=a['assessment_id']) }}" class="btn btn-secondary" style="padding: 4px 10px; font-size: 11.5px;">
+                                    View Report →
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </section>
+
+    </main>
+</body>
+
+</html>

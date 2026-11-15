@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Graph Explorer | AquaGrid</title>
+    <meta name="description"
+        content="Explore water network reachability and connectivity using Breadth-First Search (BFS) graph simulation.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/graph.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'graph' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <!-- ── Top bar ─────────────────────────────────────────────────── -->
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">GRAPH ENGINE · TOPOLOGICAL REACHABILITY</p>
+                <h1>Graph Explorer</h1>
+                <p class="muted">Simulate network reachability and explore connected subgraphs using Breadth-First Search (BFS).</p>
+            </div>
+            <span class="status"><span></span> GRAPH SIMULATION</span>
+        </header>
+
+        <!-- ── Simulation Disclaimer Banner ────────────────────────────── -->
+        <section class="simulation-banner" role="region" aria-label="Simulation Notice">
+            <span class="sim-icon">ℹ</span>
+            <div>
+                <div class="sim-title">Graph-Based Simulation Mode</div>
+                <p class="sim-text">
+                    This module computes topological reachability using an adjacency-list graph and Breadth-First Search (BFS) across valid active pipes.
+                    <strong>This is a graph-based simulation, not real hydraulic simulation</strong> (does not solve fluid dynamics, head loss, or pressure equations)
+                    and <strong>not live sensor data</strong>.
+                </p>
+            </div>
+        </section>
+
+        {% if is_empty_network %}
+        <!-- ── Empty Network State ────────────────────────────────────── -->
+        <section class="panel">
+            <div class="nw-empty">
+                <span class="nw-empty-icon">🕸</span>
+                <h3>The Water Network is Empty</h3>
+                <p class="muted">There are no network nodes in the database yet. Add tanks, junctions, or valves first to simulate graph reachability.</p>
+                <div style="margin-top: 18px;">
+                    <a href="/network" class="btn btn-primary" style="display:inline-block; padding: 10px 20px; border-radius: 8px; text-decoration: none; color: white; background: #1a7a54; font-weight: 700;">+ Go to Water Network</a>
+                </div>
+            </div>
+        </section>
+        {% else %}
+
+        <!-- ── Explorer Control Panel ─────────────────────────────────── -->
+        <section class="panel graph-controls-panel" aria-labelledby="controls-heading">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="controls-heading" style="font-size: 16px; margin-bottom: 4px;">Run Reachability Simulation</h2>
+                    <p class="muted">Select a starting node to inspect all reachable components and pipe connections.</p>
+                </div>
+                <span class="tag">{{ graph.node_count }} nodes · {{ graph.edge_count }} active pipes</span>
+            </div>
+
+            <form method="POST" action="/graph" class="nw-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="form-row explorer-form-row">
+                    <div class="form-group">
+                        <label for="start_node_id">Starting Node <span class="req">*</span></label>
+                        <select id="start_node_id" name="start_node_id" required>
+                            {% for node in all_nodes %}
+                            <option value="{{ node.id }}" {% if selected_node_id == node.id %}selected{% endif %}>
+                                {{ node.name }} (ID #{{ node.id }} · {{ node.node_type|capitalize }} · {{ node.status|capitalize }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="traversal_mode">Graph Directionality</label>
+                        <select id="traversal_mode" name="traversal_mode">
+                            <option value="undirected" {% if traversal_mode == 'undirected' %}selected{% endif %}>
+                                Bidirectional Conduits (Standard Network)
+                            </option>
+                            <option value="directed" {% if traversal_mode == 'directed' %}selected{% endif %}>
+                                Directed Flow (From → To Only)
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="form-group form-action-group">
+                        <button type="submit" class="btn-traverse" id="traverse-btn">
+                            Run BFS Traversal
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+        {% if simulation %}
+            {% if not simulation.found %}
+            <!-- ── Invalid Node State ───────────────────────────────────── -->
+            <section class="panel">
+                <div class="nw-empty">
+                    <span class="nw-empty-icon">⚠</span>
+                    <h3>Node Not Found</h3>
+                    <p class="muted">The selected starting node ID ({{ simulation.start_node_id }}) does not exist in the graph.</p>
+                </div>
+            </section>
+            {% else %}
+
+            <!-- ── Simulation Metric Cards ─────────────────────────────── -->
+            <section class="metrics" aria-label="Simulation Metrics" style="margin-bottom: 24px;">
+                <article class="metric">
+                    <p>Starting Root Node</p>
+                    <h2 style="font-size: 20px;">#{{ simulation.start_node_id }}</h2>
+                    <span>
+                        {% for n in simulation.nodes if n.id == simulation.start_node_id %}
+                        {{ n.name }} ({{ n.node_type|capitalize }})
+                        {% endfor %}
+                    </span>
+                </article>
+
+                <article class="metric">
+                    <p>Reachable Nodes</p>
+                    <h2>{{ simulation.total_reachable }} <small>/ {{ simulation.total_nodes }}</small></h2>
+                    <span>
+                        {% if simulation.total_nodes > 0 %}
+                        {{ ((simulation.total_reachable / simulation.total_nodes) * 100)|round(1) }}% network reachability
+                        {% else %}
+                        0%
+                        {% endif %}
+                    </span>
+                </article>
+
+                <article class="metric">
+                    <p>Subnetwork State</p>
+                    <h2>
+                        {% if simulation.is_isolated %}
+                        <span style="color: #b45309; font-size: 18px;">Isolated Node</span>
+                        {% else %}
+                        <span style="color: #1a7a54; font-size: 18px;">Connected</span>
+                        {% endif %}
+                    </h2>
+                    <span>
+                        {% if simulation.is_isolated %}
+                        0 active connections
+                        {% else %}
+                        {{ simulation.connections_used|length }} active pipe{{ 's' if simulation.connections_used|length != 1 else '' }} in component
+                        {% endif %}
+                    </span>
+                </article>
+
+                <article class="metric">
+                    <p>Inactive Pipes Ignored</p>
+                    <h2>{{ graph.inactive_pipes|length }}</h2>
+                    <span class="muted">Excluded from traversal</span>
+                </article>
+            </section>
+
+            <!-- ── Traversal Order Sequence ────────────────────────────── -->
+            <section class="panel" style="margin-bottom: 24px;">
+                <div class="panel-heading">
+                    <div>
+                        <h3 style="font-size: 15px;">BFS Traversal Discovery Order</h3>
+                        <p class="muted">Ordered sequence of nodes visited level-by-level via Breadth-First Search.</p>
+                    </div>
+                    <span class="tag">{{ simulation.nodes|length }} reachable</span>
+                </div>
+
+                <div class="traversal-sequence">
+                    {% for n in simulation.nodes %}
+                    <div class="step-node {% if loop.first %}is-root{% endif %}">
+                        <span class="step-num">{{ n.bfs_step }}</span>
+                        <span>{{ n.name }}</span>
+                        <span class="type-badge type-{{ n.node_type }}">{{ n.node_type }}</span>
+                        <span class="depth-badge">Depth {{ n.depth }}</span>
+                    </div>
+                    {% if not loop.last %}
+                    <span class="step-arrow">➔</span>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+
+                {% if simulation.is_isolated %}
+                <div class="isolated-alert">
+                    <strong>Isolated Node Notice:</strong> No other nodes in the network are reachable from this node. There are no active pipes connected to it.
+                </div>
+                {% endif %}
+            </section>
+
+            <!-- ── Reachable Nodes Detail Table ────────────────────────── -->
+            <section class="panel" style="margin-bottom: 24px;">
+                <div class="panel-heading">
+                    <div>
+                        <h3 style="font-size: 15px;">Reachable Network Nodes</h3>
+                        <p class="muted">All nodes belonging to this reachable network component.</p>
+                    </div>
+                    <span class="tag">{{ simulation.nodes|length }} nodes</span>
+                </div>
+
+                <div class="nw-table-wrap">
+                    <table class="nw-table">
+                        <thead>
+                            <tr>
+                                <th>BFS Step</th>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Depth Level</th>
+                                <th>Location</th>
+                                <th>Node Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for n in simulation.nodes %}
+                            <tr>
+                                <td>
+                                    <span class="nw-id" style="font-weight: 800; color: #1a5fa8;">
+                                        #{{ n.bfs_step }} {% if loop.first %}(Root){% endif %}
+                                    </span>
+                                </td>
+                                <td><span class="nw-id">#{{ n.id }}</span></td>
+                                <td>
+                                    <span class="nw-name">{{ n.name }}</span>
+                                    {% if loop.first %}
+                                    <span style="font-size: 10px; background: #e0f0ff; color: #1d4ed8; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 6px;">START</span>
+                                    {% endif %}
+                                </td>
+                                <td><span class="type-badge type-{{ n.node_type }}">{{ n.node_type }}</span></td>
+                                <td><span class="depth-badge">{{ n.depth }} hops</span></td>
+                                <td><span class="nw-location">{{ n.location or '—' }}</span></td>
+                                <td><span class="status-pill status-{{ n.status }}">{{ n.status }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- ── Connections Used Table ──────────────────────────────── -->
+            <section class="panel">
+                <div class="panel-heading">
+                    <div>
+                        <h3 style="font-size: 15px;">Active Pipe Connections in Subgraph</h3>
+                        <p class="muted">Active edges connecting reachable nodes in this simulated subnetwork.</p>
+                    </div>
+                    <span class="tag">{{ simulation.connections_used|length }} connections</span>
+                </div>
+
+                {% if simulation.connections_used %}
+                <div class="nw-table-wrap">
+                    <table class="nw-table">
+                        <thead>
+                            <tr>
+                                <th>Pipe ID</th>
+                                <th>Name</th>
+                                <th>From Node</th>
+                                <th>To Node</th>
+                                <th>Length (m)</th>
+                                <th>Capacity (L/min)</th>
+                                <th>Routing Weight</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in simulation.connections_used %}
+                            <tr>
+                                <td><span class="nw-id">#{{ p.pipe_id }}</span></td>
+                                <td><span class="nw-name">{{ p.name }}</span></td>
+                                <td>
+                                    <span class="nw-name">#{{ p.from_node_id }}</span>
+                                    <span class="muted" style="font-size: 11px;">({{ node_map.get(p.from_node_id, '') }})</span>
+                                </td>
+                                <td>
+                                    <span class="nw-name">#{{ p.to_node_id }}</span>
+                                    <span class="muted" style="font-size: 11px;">({{ node_map.get(p.to_node_id, '') }})</span>
+                                </td>
+                                <td>{{ p.length_m }} m</td>
+                                <td>{{ p.capacity_lpm }} L/min</td>
+                                <td>{{ p.cost }}</td>
+                                <td><span class="status-pill status-{{ p.status }}">{{ p.status }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="nw-empty" style="padding: 30px 20px;">
+                    <p class="muted">No active pipe connections were used (isolated node or no active edges in this component).</p>
+                </div>
+                {% endif %}
+            </section>
+
+            {% endif %}
+        {% endif %}
+
+        {% endif %}
+
+    </main>
+</body>
+
+</html>
+

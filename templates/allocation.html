@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fair Water Allocation | AquaGrid</title>
+    <meta name="description"
+        content="Equitable municipal water rationing powered by three-tier weighted max-min fairness under supply constraints in AquaGrid.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/graph.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/allocation.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'allocation' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <!-- ── Top bar ─────────────────────────────────────────────────── -->
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">WATER RESOURCE OPTIMIZATION · DSA WATER-FILLING ENGINE</p>
+                <h1>Fair Water Allocation</h1>
+                <p class="muted">Equitable municipal water rationing powered by three-tier weighted max-min fairness under supply constraints.</p>
+            </div>
+            <span class="status"><span></span> FAIRNESS DISPATCH</span>
+        </header>
+
+        <!-- ── Flash messages ──────────────────────────────────────────── -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-list" role="alert" aria-live="polite">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                <span class="flash-icon">{% if category == 'success' %}✓{% elif category == 'warning' %}⚠{% else %}✕{% endif %}</span>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- ── Mandatory Simulation Disclaimer Banner ───────────────────── -->
+        <section class="simulation-banner" role="region" aria-label="Fair Water Allocation Notice" style="margin-bottom: 24px;">
+            <span class="sim-icon">⚖</span>
+            <div>
+                <div class="sim-title">Fair Water Allocation Simulation Notice</div>
+                <p class="sim-text">
+                    Fair Water Allocation Simulation: This module calculates fair volumetric water entitlements under limited supply using weighted max-min fairness. It does not perform physical hydraulic flow or pressure optimization.
+                </p>
+            </div>
+        </section>
+
+        <!-- ── Summary KPI Cards ────────────────────────────────────────── -->
+        <section class="metrics" aria-label="Allocation KPI Metrics" style="margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
+            <article class="metric">
+                <p>Total Available Supply</p>
+                <h2 style="color: #0284c7;">
+                    {% if latest_run %}
+                    {{ "{:,.2f}".format(latest_run['total_available_supply_l']) }} <small style="font-size: 13px; font-weight: normal;">L</small>
+                    {% else %}
+                    0.00 <small style="font-size: 13px; font-weight: normal;">L</small>
+                    {% endif %}
+                </h2>
+                <span>{% if latest_run %}Run #{{ latest_run['run_id'] }} dispatch{% else %}No dispatch yet{% endif %}</span>
+            </article>
+
+            <article class="metric">
+                <p>Total Requested Demand</p>
+                <h2 style="color: #475569;">
+                    {{ "{:,.2f}".format(total_active_demand) }} <small style="font-size: 13px; font-weight: normal;">L</small>
+                </h2>
+                <span>Sum across {{ active_zones|length }} active zone{{ 's' if active_zones|length != 1 else '' }}</span>
+            </article>
+
+            <article class="metric">
+                <p>Total Allocated Water</p>
+                <h2 style="color: #16a34a;">
+                    {% if latest_run %}
+                    {{ "{:,.2f}".format(latest_run['total_allocated_l']) }} <small style="font-size: 13px; font-weight: normal;">L</small>
+                    {% else %}
+                    0.00 <small style="font-size: 13px; font-weight: normal;">L</small>
+                    {% endif %}
+                </h2>
+                <span>
+                    {% if latest_run %}
+                    {{ "{:.1f}".format(latest_run['satisfaction_rate_pct']) }}% aggregate satisfaction
+                    {% else %}
+                    Awaiting dispatch
+                    {% endif %}
+                </span>
+            </article>
+
+            <article class="metric">
+                <p>Total Unmet Demand</p>
+                <h2 style="color: {% if latest_run and latest_run['total_unmet_l'] > 0 %}#dc2626{% else %}#16a34a{% endif %};">
+                    {% if latest_run %}
+                    {{ "{:,.2f}".format(latest_run['total_unmet_l']) }} <small style="font-size: 13px; font-weight: normal;">L</small>
+                    {% else %}
+                    0.00 <small style="font-size: 13px; font-weight: normal;">L</small>
+                    {% endif %}
+                </h2>
+                <span>
+                    {% if latest_run and latest_run['total_unmet_l'] > 0 %}
+                    Deficit under current shortage
+                    {% else %}
+                    Zero deficit
+                    {% endif %}
+                </span>
+            </article>
+
+            <article class="metric">
+                <p>Active Allocation Zones</p>
+                <h2 style="color: #2563eb;">{{ active_zones|length }}</h2>
+                <span>{{ all_zones|length }} total zones configured</span>
+            </article>
+        </section>
+
+        <!-- ── Allocation Execution Panel ───────────────────────────────── -->
+        <section class="panel alloc-panel">
+            <div class="alloc-panel-header">
+                <div>
+                    <h3>Execute Water Rationing Run</h3>
+                    <p>Enter the available water volume to execute three-tier weighted max-min fair allocation across active consumer zones.</p>
+                </div>
+                <span class="tag">Algorithmic Dispatch</span>
+            </div>
+
+            <form method="POST" action="{{ url_for('allocation_run') }}" class="nw-form" id="run-allocation-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="form-row">
+                    <div class="form-group" style="flex: 2;">
+                        <label for="available_supply">Available Water Supply (Litres) <span class="req">*</span></label>
+                        <input type="number" id="available_supply" name="available_supply" step="0.01" min="0" required
+                            placeholder="e.g. 50000.00" autocomplete="off">
+                        <small class="muted">Total bulk volume available for distribution across active zones.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="period_start">Allocation Period Start</label>
+                        <input type="datetime-local" id="period_start" name="period_start">
+                        <small class="muted">Optional dispatch window start.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="period_end">Allocation Period End</label>
+                        <input type="datetime-local" id="period_end" name="period_end">
+                        <small class="muted">Optional dispatch window end.</small>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex: 3;">
+                        <label for="notes">Operational Dispatch Notes</label>
+                        <input type="text" id="notes" name="notes" maxlength="250" placeholder="e.g. Morning reservoir maintenance rationing run" autocomplete="off">
+                    </div>
+                    <div class="form-group" style="flex: 1; align-self: flex-end;">
+                        <button type="submit" class="btn btn-primary" id="btn-run-allocation" style="width: 100%; height: 42px;">
+                            ⚡ Run Allocation
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+        <!-- ── Latest Allocation Results ────────────────────────────────── -->
+        <section class="panel alloc-panel">
+            <div class="alloc-panel-header">
+                <div>
+                    <h3>
+                        {% if latest_run %}
+                        Latest Allocation Dispatch: Run #{{ latest_run['run_id'] }}
+                        {% else %}
+                        Allocation Results
+                        {% endif %}
+                    </h3>
+                    <p>
+                        {% if latest_run %}
+                        Recorded on {{ latest_run['run_timestamp'] }} · Policy: 
+                        <span class="policy-badge {% if latest_run['allocation_policy'] == 'ABUNDANT_SUPPLY' %}policy-abundant{% elif latest_run['allocation_policy'] == 'WEIGHTED_MAX_MIN_RESIDUAL' %}policy-constrained{% elif latest_run['allocation_policy'] == 'EMERGENCY_ESSENTIAL_PROPORTIONAL' %}policy-deficit{% else %}policy-fallback{% endif %}">
+                            {{ latest_run['allocation_policy'] }}
+                        </span>
+                        {% else %}
+                        No allocation runs have been executed yet.
+                        {% endif %}
+                    </p>
+                </div>
+                {% if latest_run %}
+                <div style="text-align: right;">
+                    <span class="tag" style="font-size: 13px; font-weight: 700;">
+                        Overall Satisfaction: {{ "{:.1f}".format(latest_run['satisfaction_rate_pct']) }}%
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if latest_allocations %}
+            <div class="table-wrap">
+                <table class="nw-table" aria-label="Latest Allocation Results Table">
+                    <thead>
+                        <tr>
+                            <th>Zone</th>
+                            <th style="text-align: right;">Demand (L)</th>
+                            <th style="text-align: right;">Essential (L)</th>
+                            <th style="text-align: center;">Weight</th>
+                            <th style="text-align: right;">Allocated (L)</th>
+                            <th style="text-align: right;">Unmet (L)</th>
+                            <th style="min-width: 160px;">Satisfaction</th>
+                            <th>Explanation</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for alloc in latest_allocations %}
+                        <tr>
+                            <td>
+                                <strong>{{ alloc['zone_name_snapshot'] }}</strong>
+                                {% if alloc['priority_category'] %}
+                                <br><span class="category-tag category-{{ alloc['priority_category'] }}">{{ alloc['priority_category'] }}</span>
+                                {% endif %}
+                                {% if alloc['is_bottleneck'] %}
+                                <span title="Zone reached full requested demand ceiling" style="color: #059669; font-size: 11px; font-weight: 700; margin-left: 4px;">✓ Saturated</span>
+                                {% endif %}
+                            </td>
+                            <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(alloc['requested_demand_l']) }}
+                            </td>
+                            <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(alloc['essential_min_l']) }}
+                            </td>
+                            <td style="text-align: center; font-weight: 700;">
+                                {{ "{:.1f}".format(alloc['fairness_weight']) }}×
+                            </td>
+                            <td style="text-align: right; font-weight: 700; color: #0284c7; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(alloc['allocated_amount_l']) }}
+                            </td>
+                            <td style="text-align: right; color: {% if alloc['unmet_demand_l'] > 0 %}#dc2626{% else %}#16a34a{% endif %}; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(alloc['unmet_demand_l']) }}
+                            </td>
+                            <td>
+                                <div class="alloc-progress-container">
+                                    <div class="alloc-progress-bar">
+                                        <div class="alloc-progress-fill {% if alloc['satisfaction_rate_pct'] >= 90 %}progress-high{% elif alloc['satisfaction_rate_pct'] >= 50 %}progress-mid{% else %}progress-low{% endif %}"
+                                            style="width: {{ alloc['satisfaction_rate_pct'] }}%;">
+                                        </div>
+                                    </div>
+                                    <span class="alloc-progress-text" style="color: {% if alloc['satisfaction_rate_pct'] >= 90 %}#16a34a{% elif alloc['satisfaction_rate_pct'] >= 50 %}#d97706{% else %}#dc2626{% endif %};">
+                                        {{ "{:.1f}".format(alloc['satisfaction_rate_pct']) }}%
+                                    </span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="explanation-text">
+                                    {% if alloc['tier_reached'] == 3 %}
+                                    <span style="color: #16a34a; font-weight: 600;">100% Satisfied:</span> Full requested demand fulfilled under {{ latest_run['allocation_policy'] }}.
+                                    {% elif alloc['tier_reached'] == 2 %}
+                                    <span style="color: #0284c7; font-weight: 600;">Residual Shared:</span> Essential minimum guaranteed + weight-proportional residual water-filling.
+                                    {% elif alloc['tier_reached'] == 1 %}
+                                    <span style="color: #d97706; font-weight: 600;">Essential Only:</span> Critical baseline met; no residual surplus available.
+                                    {% else %}
+                                    <span style="color: #dc2626; font-weight: 600;">Emergency Rationing:</span> Available supply rationed proportionally to survival minimums.
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">⚖</div>
+                <h4>No Allocation Runs Executed</h4>
+                <p>Configure distribution zones below and submit an available water supply above to execute your first fair water allocation run.</p>
+            </div>
+            {% endif %}
+        </section>
+
+        <!-- ── Allocation Zone Management ───────────────────────────────── -->
+        <section class="panel alloc-panel">
+            <div class="alloc-panel-header">
+                <div>
+                    <h3>Configured Consumer Distribution Zones</h3>
+                    <p>Manage consumer zones, requested demands, essential survival baselines, and municipal fairness weights.</p>
+                </div>
+                <button type="button" class="btn btn-secondary" id="toggle-zone-form-btn" onclick="toggleZoneForm()" style="font-size: 13px;">
+                    + Add New Zone
+                </button>
+            </div>
+
+            <!-- New Zone Form (Hidden by default or toggled) -->
+            <div id="new-zone-form-wrapper" style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 14px 0; font-size: 15px; color: #0f172a;">Add New Distribution Zone</h4>
+                <form method="POST" action="{{ url_for('allocation_zone_create') }}" class="nw-form" id="create-zone-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 2;">
+                            <label for="zone_name">Zone Name <span class="req">*</span></label>
+                            <input type="text" id="zone_name" name="zone_name" required maxlength="120" placeholder="e.g. Central District Hospital" autocomplete="off">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="node_id">Network Node (Optional)</label>
+                            <select id="node_id" name="node_id">
+                                <option value="">-- Unassigned --</option>
+                                {% for n in all_nodes %}
+                                <option value="{{ n['id'] }}">{{ n['name'] }} ({{ n['node_type'] }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="priority_category">Priority Category <span class="req">*</span></label>
+                            <select id="priority_category" name="priority_category" required>
+                                {% for cat in allowed_categories %}
+                                <option value="{{ cat }}" {% if cat == 'standard' %}selected{% endif %}>{{ cat | capitalize }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="requested_demand_l">Requested Demand (L) <span class="req">*</span></label>
+                            <input type="number" id="requested_demand_l" name="requested_demand_l" step="0.01" min="0" required placeholder="e.g. 5000.00">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="essential_min_l">Essential Minimum (L) <span class="req">*</span></label>
+                            <input type="number" id="essential_min_l" name="essential_min_l" step="0.01" min="0" required value="0.00" placeholder="e.g. 1500.00">
+                            <small class="muted">Must be ≤ requested demand.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="fairness_weight">Fairness Weight <span class="req">*</span></label>
+                            <input type="number" id="fairness_weight" name="fairness_weight" step="0.1" min="0.1" required value="1.0" placeholder="e.g. 2.0">
+                            <small class="muted">Multiplier for residual surplus water.</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="status">Status <span class="req">*</span></label>
+                            <select id="status" name="status" required>
+                                {% for s in allowed_statuses %}
+                                <option value="{{ s }}" {% if s == 'active' %}selected{% endif %}>{{ s | capitalize }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 3;">
+                            <label for="description">Description</label>
+                            <input type="text" id="description" name="description" maxlength="250" placeholder="Optional notes on population or critical infrastructure">
+                        </div>
+                        <div class="form-group" style="flex: 1; align-self: flex-end; display: flex; gap: 8px;">
+                            <button type="submit" class="btn btn-primary" style="flex: 1;">Save Zone</button>
+                            <button type="button" class="btn btn-secondary" onclick="toggleZoneForm()">Cancel</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Zones Table -->
+            {% if all_zones %}
+            <div class="table-wrap">
+                <table class="nw-table" aria-label="Distribution Zones Table">
+                    <thead>
+                        <tr>
+                            <th>Zone Name</th>
+                            <th>Network Node</th>
+                            <th>Category</th>
+                            <th style="text-align: right;">Demand (L)</th>
+                            <th style="text-align: right;">Essential (L)</th>
+                            <th style="text-align: center;">Weight</th>
+                            <th>Status</th>
+                            <th style="text-align: right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for z in all_zones %}
+                        <tr>
+                            <td>
+                                <strong>{{ z['zone_name'] }}</strong>
+                                {% if z['description'] %}
+                                <br><small class="muted">{{ z['description'] }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if z['node_name'] %}
+                                <span class="tag">{{ z['node_name'] }}</span>
+                                {% else %}
+                                <span class="muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="category-tag category-{{ z['priority_category'] }}">{{ z['priority_category'] }}</span>
+                            </td>
+                            <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(z['requested_demand_l']) }}
+                            </td>
+                            <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(z['essential_min_l']) }}
+                            </td>
+                            <td style="text-align: center; font-weight: 700;">
+                                {{ "{:.1f}".format(z['fairness_weight']) }}×
+                            </td>
+                            <td>
+                                <span class="status-pill {{ z['status'] }}">
+                                    ● {{ z['status'] | capitalize }}
+                                </span>
+                            </td>
+                            <td style="text-align: right;">
+                                <div class="btn-action-group" style="justify-content: flex-end;">
+                                    <a href="{{ url_for('allocation_zone_edit', zone_id=z['zone_id']) }}" class="btn-sm btn-sm-edit">
+                                        Edit
+                                    </a>
+                                    <form method="POST" action="{{ url_for('allocation_zone_delete', zone_id=z['zone_id']) }}"
+                                        onsubmit="return confirm('Are you sure you want to delete zone &quot;{{ z['zone_name'] }}&quot;? If historical records exist, please deactivate instead.');" style="display: inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn-sm btn-sm-delete">
+                                            Delete
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">🏢</div>
+                <h4>No Consumer Zones Defined</h4>
+                <p>Click "Add New Zone" above to configure your municipal water distribution zones.</p>
+            </div>
+            {% endif %}
+        </section>
+
+        <!-- ── Fairness Doctrine & Theoretical Explanation ──────────────── -->
+        <section class="panel alloc-panel">
+            <div class="alloc-panel-header">
+                <div>
+                    <h3>Fairness Doctrine & Allocation Mechanics</h3>
+                    <p>Transparent, explainable resource rationing under the three operational supply regimes.</p>
+                </div>
+                <span class="tag">DSA Max-Min Fairness</span>
+            </div>
+
+            <div class="doctrine-grid">
+                <!-- Scenario 1 -->
+                <div class="doctrine-card">
+                    <h4><span style="color: #16a34a;">●</span> Scenario 1: Abundant Supply</h4>
+                    <p>When aggregate municipal supply meets or exceeds total requested demand across all zones, every zone receives 100% of its requested volume.</p>
+                    <div class="doctrine-formula">
+                        Supply S ≥ Σ d_i  ⟹  a_i = d_i (100%)
+                    </div>
+                </div>
+
+                <!-- Scenario 2 -->
+                <div class="doctrine-card">
+                    <h4><span style="color: #0284c7;">●</span> Scenario 2: Constrained Supply</h4>
+                    <p>When supply covers critical baselines but cannot fulfill all demand, essential minimums are guaranteed first. Remaining surplus is leveled via progressive water-filling.</p>
+                    <div class="doctrine-formula">
+                        Step 1: a_i = e_i<br>
+                        Step 2: Level (x_i / w_i) on (d_i - e_i)
+                    </div>
+                </div>
+
+                <!-- Scenario 3 -->
+                <div class="doctrine-card">
+                    <h4><span style="color: #dc2626;">●</span> Scenario 3: Severe Emergency Deficit</h4>
+                    <p>When available supply falls below aggregate survival needs, water is rationed strictly proportionally to essential requirements to sustain human life.</p>
+                    <div class="doctrine-formula">
+                        Supply S &lt; Σ e_i  ⟹  a_i = S · (e_i / Σ e_j)
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 16px; padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; color: #475569; line-height: 1.5;">
+                <strong>Fairness Weights vs. Priority Categories:</strong>
+                Fairness weights ($w_i > 0$) determine the proportional leveling slope when allocating residual water during constrained supply (Scenario 2). A zone with weight $2.0\times$ receives twice the residual water per leveling unit compared to a zone with weight $1.0\times$, until its requested demand ceiling is reached.
+                <em>Priority categories (Critical, Standard, Commercial, Agricultural) serve as administrative and operational metadata tags; they do not automatically override numerical fairness weights unless configured.</em>
+            </div>
+        </section>
+
+        <!-- ── Allocation History ───────────────────────────────────────── -->
+        <section class="panel alloc-panel">
+            <div class="alloc-panel-header">
+                <div>
+                    <h3>Historical Allocation Runs</h3>
+                    <p>Audit trail of all executed fair water rationing runs and compliance snapshots.</p>
+                </div>
+                <span class="tag">{{ historical_runs|length }} Runs Recorded</span>
+            </div>
+
+            {% if historical_runs %}
+            <div class="table-wrap">
+                <table class="nw-table" aria-label="Historical Allocation Runs Table">
+                    <thead>
+                        <tr>
+                            <th>Run ID</th>
+                            <th>Timestamp</th>
+                            <th style="text-align: right;">Supply (L)</th>
+                            <th style="text-align: right;">Demand (L)</th>
+                            <th style="text-align: right;">Allocated (L)</th>
+                            <th style="text-align: right;">Unmet (L)</th>
+                            <th>Policy Applied</th>
+                            <th>Satisfaction</th>
+                            <th style="text-align: center;">Zones</th>
+                            <th style="text-align: right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in historical_runs %}
+                        <tr>
+                            <td>
+                                <strong>#{{ r['run_id'] }}</strong>
+                            </td>
+                            <td style="font-size: 12px; color: #64748b;">
+                                {{ r['run_timestamp'] }}
+                            </td>
+                            <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(r['total_available_supply_l']) }}
+                            </td>
+                            <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(r['total_requested_demand_l']) }}
+                            </td>
+                            <td style="text-align: right; font-weight: 700; color: #0284c7; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(r['total_allocated_l']) }}
+                            </td>
+                            <td style="text-align: right; color: {% if r['total_unmet_l'] > 0 %}#dc2626{% else %}#16a34a{% endif %}; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(r['total_unmet_l']) }}
+                            </td>
+                            <td>
+                                <span class="policy-badge {% if r['allocation_policy'] == 'ABUNDANT_SUPPLY' %}policy-abundant{% elif r['allocation_policy'] == 'WEIGHTED_MAX_MIN_RESIDUAL' %}policy-constrained{% elif r['allocation_policy'] == 'EMERGENCY_ESSENTIAL_PROPORTIONAL' %}policy-deficit{% else %}policy-fallback{% endif %}">
+                                    {{ r['allocation_policy'] }}
+                                </span>
+                            </td>
+                            <td>
+                                <span style="font-weight: 700; color: {% if r['satisfaction_rate_pct'] >= 90 %}#16a34a{% elif r['satisfaction_rate_pct'] >= 50 %}#d97706{% else %}#dc2626{% endif %};">
+                                    {{ "{:.1f}".format(r['satisfaction_rate_pct']) }}%
+                                </span>
+                            </td>
+                            <td style="text-align: center;">
+                                {{ r['active_zone_count'] }}
+                            </td>
+                            <td style="text-align: right;">
+                                <a href="{{ url_for('allocation_run_details', run_id=r['run_id']) }}" class="btn-sm btn-sm-edit">
+                                    View Details &rarr;
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <h4>No Allocation History</h4>
+                <p>No historical runs recorded yet. Executed runs will appear here as immutable audit records.</p>
+            </div>
+            {% endif %}
+        </section>
+
+    </main>
+
+    <script>
+        function toggleZoneForm() {
+            var form = document.getElementById('new-zone-form-wrapper');
+            var btn = document.getElementById('toggle-zone-form-btn');
+            if (form.style.display === 'none') {
+                form.style.display = 'block';
+                btn.textContent = '✕ Close Form';
+            } else {
+                form.style.display = 'none';
+                btn.textContent = '+ Add New Zone';
+            }
+        }
+    </script>
+</body>
+
+</html>
+

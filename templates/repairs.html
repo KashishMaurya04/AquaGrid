@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Repair Priority Queue | AquaGrid</title>
+    <meta name="description"
+        content="Smart repair task prioritization powered by a custom Max Heap and multi-factor hydraulic anomaly scoring in AquaGrid.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/graph.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'repairs' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <!-- ── Top bar ─────────────────────────────────────────────────── -->
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">WATER ASSET MANAGEMENT · DSA MAX-HEAP ENGINE</p>
+                <h1>Smart Repair Priority Queue</h1>
+                <p class="muted">Dynamically prioritize urgent distribution repairs using a custom binary Max Heap and
+                    multi-factor hydraulic anomaly evidence.</p>
+            </div>
+            <span class="status"><span></span> MAX-HEAP DISPATCH</span>
+        </header>
+
+        <!-- ── Flash messages ──────────────────────────────────────────── -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-list" role="alert" aria-live="polite">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                <span class="flash-icon">{% if category == 'success' %}✓{% else %}⚠{% endif %}</span>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- ── Simulation Disclaimer Banner ────────────────────────────── -->
+        <section class="simulation-banner" role="region" aria-label="Repair Priority Notice">
+            <span class="sim-icon">🔧</span>
+            <div>
+                <div class="sim-title">Algorithmic Priority Ranking Notice</div>
+                <p class="sim-text">
+                    Repair priority scores (0–100) are normalized mathematical ranking metrics calculated from
+                    statistical anomaly z-scores, persistence, and pipe delivery capacity.
+                    They do not represent calibrated failure probabilities, physical structural burst damage, or direct
+                    financial loss estimates. Tasks are queued dynamically via AquaGrid's custom list-based Max Heap.
+                </p>
+            </div>
+        </section>
+
+        <!-- ── Summary Cards ───────────────────────────────────────────── -->
+        <section class="metrics" aria-label="Repair Queue Metrics"
+            style="margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px;">
+            <article class="metric">
+                <p>Pending Tasks</p>
+                <h2 id="pending-count" style="color: {% if pending_count > 0 %}#dc2626{% else %}#059669{% endif %};">
+                    {{ pending_count }}
+                </h2>
+                <span>{{ active_count }} active in queue</span>
+            </article>
+
+            <article class="metric">
+                <p>Critical Priority</p>
+                <h2 style="color: #dc2626;">{{ category_counts['CRITICAL'] }}</h2>
+                <span>Score: 80–100 · Immediate</span>
+            </article>
+
+            <article class="metric">
+                <p>High Priority</p>
+                <h2 style="color: #ea580c;">{{ category_counts['HIGH'] }}</h2>
+                <span>Score: 60–79 · Urgent</span>
+            </article>
+
+            <article class="metric">
+                <p>Medium Priority</p>
+                <h2 style="color: #d97706;">{{ category_counts['MEDIUM'] }}</h2>
+                <span>Score: 35–59 · Scheduled</span>
+            </article>
+
+            <article class="metric">
+                <p>Low Priority</p>
+                <h2 style="color: #2563eb;">{{ category_counts['LOW'] }}</h2>
+                <span>Score: 0–34 · Routine</span>
+            </article>
+        </section>
+
+        <!-- ── Scoring Formula & Max Heap Architecture Panel ────────────── -->
+        <section class="panel graph-controls-panel" aria-labelledby="formula-heading">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="formula-heading" style="font-size: 16px; margin-bottom: 4px;">Scoring Formula & Custom Max
+                        Heap Specification</h2>
+                    <p class="muted">Normalized composite score (0–100) evaluated across quantifiable telemetry metrics.
+                    </p>
+                </div>
+                <span class="tag">Max Heap: {{ ordered_tasks|length }} active items</span>
+            </div>
+
+            <div style="font-size: 12px; color: #334155; line-height: 1.6; padding-top: 6px;">
+                <p style="margin-bottom: 8px;">
+                    <strong>Composite Formula:</strong>
+                    <code>Priority Score = S_flow (max 30) + S_pressure (max 30) + S_severity (max 20) + S_persistence (max 10) + S_pipe (max 10)</code>
+                </p>
+                <div style="display: flex; gap: 18px; flex-wrap: wrap; color: #64748b; font-size: 11px;">
+                    <div>• <strong>Flow Surge:</strong> z &ge; +4.0 (30 pts) · z &ge; +3.0 (24 pts) · z &ge; +2.5 (18
+                        pts)</div>
+                    <div>• <strong>Pressure Drop:</strong> z &le; -3.5 (30 pts) · z &le; -2.5 (24 pts) · z &le; -2.0 (18
+                        pts)</div>
+                    <div>• <strong>Severity:</strong> Critical (20 pts) · High (15 pts) · Medium (10 pts)</div>
+                    <div>• <strong>Persistence:</strong> &ge;5 consecutive (10 pts) · 3–4 (6–8 pts)</div>
+                    <div>• <strong>Asset:</strong> Trunk &ge;600 L/min (10 pts) · Branch (6 pts) · Service (3 pts)</div>
+                </div>
+            </div>
+
+            <div
+                style="margin-top: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                <form method="POST" action="{{ url_for('repair_queue_sync') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="action-btn" style="padding: 8px 16px; font-weight: 600;">
+                        🔄 Re-sync Tasks from Leak Events
+                    </button>
+                </form>
+                <span style="font-size: 11px; color: #64748b;">
+                    Root extraction order: Deterministic tie-breaking on detection timestamp and task ID.
+                </span>
+            </div>
+        </section>
+
+        <!-- ── Active Priority Queue Table (Max Heap Order) ─────────────── -->
+        <section class="panel nw-table-panel" aria-labelledby="queue-table-heading" style="margin-top: 24px;">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="queue-table-heading">Active Priority Dispatch Queue</h2>
+                    <p class="muted">Ordered strictly by priority score via bottom-up list-based Max Heap extraction
+                        (highest priority first).</p>
+                </div>
+                <span class="tag">{{ ordered_tasks|length }} tasks in queue</span>
+            </div>
+
+            {% if ordered_tasks %}
+            <div class="table-wrap">
+                <table class="nw-table" id="repair-queue-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Priority Score</th>
+                            <th>Monitored Pipe</th>
+                            <th>Source Anomaly</th>
+                            <th>Hydraulic Telemetry Evidence</th>
+                            <th>Lifecycle Status & Actions</th>
+                            <th>Score Breakdown</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for task in ordered_tasks %}
+                        <tr
+                            style="{% if task.priority_category == 'CRITICAL' %}background: #fff5f5;{% elif task.priority_category == 'HIGH' %}background: #fffaf0;{% endif %}">
+                            <td class="nw-id">
+                                <span class="priority-badge"
+                                    style="display:inline-block; padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 13px; background: {% if loop.index == 1 %}#fee2e2; color: #991b1b; border: 1px solid #fecaca;{% else %}#f1f5f9; color: #475569;{% endif %}">
+                                    #{{ '%02d'|format(loop.index) }}
+                                </span>
+                            </td>
+
+                            <!-- Priority Score & Category -->
+                            <td>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span
+                                        class="severity {% if task.priority_category == 'CRITICAL' %}severity-high{% elif task.priority_category == 'HIGH' %}severity-high{% elif task.priority_category == 'MEDIUM' %}medium-label{% else %}alert-tag{% endif %}"
+                                        style="font-weight: 700;">
+                                        {{ task.priority_category }}
+                                    </span>
+                                    <strong
+                                        style="font-size: 15px; color: {% if task.priority_category == 'CRITICAL' %}#dc2626{% elif task.priority_category == 'HIGH' %}#ea580c{% else %}#1e293b{% endif %};">
+                                        {{ task.priority_score }}
+                                    </strong>
+                                    <span style="font-size: 10px; color: #64748b;">/100</span>
+                                </div>
+                            </td>
+
+                            <!-- Monitored Pipe -->
+                            <td class="pipe-node-cell">
+                                <div><strong>{{ task.pipe_name }}</strong> <span
+                                        style="font-size: 11px; color: #64748b;">(#{{ task.pipe_id }})</span></div>
+                                <span class="pipe-node-tag" style="margin-top: 3px;">{{ task.from_node_name }} → {{
+                                    task.to_node_name }}</span>
+                            </td>
+
+                            <!-- Source Anomaly Event -->
+                            <td style="font-size: 12px; line-height: 1.4;">
+                                <div><a href="/leak-detection" style="font-weight: 600; color: #0369a1;">Leak Event #{{
+                                        task.event_id }}</a></div>
+                                <span style="font-size: 11px; color: #64748b;">Detected: {{
+                                    task.detected_at[:19].replace('T', ' ') }}</span>
+                                <div>
+                                    <span
+                                        class="severity {% if task.severity in ['high', 'critical'] %}severity-high{% else %}severity-medium{% endif %}"
+                                        style="font-size: 9px; padding: 2px 5px;">
+                                        {{ task.severity|upper }}
+                                    </span>
+                                </div>
+                            </td>
+
+                            <!-- Telemetry Evidence -->
+                            <td style="font-size: 12px; max-width: 280px; line-height: 1.4;">
+                                {% if task.flow_anomaly_score is not none %}
+                                <div>Flow z: <strong>{{ '%+.2f'|format(task.flow_anomaly_score) }}</strong></div>
+                                {% endif %}
+                                {% if task.pressure_anomaly_score is not none %}
+                                <div>Pressure z: <strong>{{ '%+.2f'|format(task.pressure_anomaly_score) }}</strong>
+                                </div>
+                                {% endif %}
+                                <div style="font-size: 11px; color: #475569; margin-top: 3px;">{{
+                                    task.evidence_description }}</div>
+                            </td>
+
+                            <!-- Status & Quick Actions -->
+                            <td>
+                                <div style="margin-bottom: 6px;">
+                                    <span
+                                        class="status-pill {% if task.status == 'In Progress' %}status-active{% elif task.status == 'Completed' %}status-active{% endif %}"
+                                        style="font-weight: 600; font-size: 11px;">
+                                        {{ task.status }}
+                                    </span>
+                                </div>
+
+                                {% if task.status == 'Pending' %}
+                                <form method="POST"
+                                    action="{{ url_for('repair_task_investigate', task_id=task.task_id) }}"
+                                    style="margin-bottom: 6px;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="primary-button"
+                                        style="padding: 4px 8px; font-size: 11px; margin-top: 0; background: #2563eb; width: auto;">
+                                        ▶ Begin Investigation
+                                    </button>
+                                </form>
+                                {% endif %}
+
+                                <form method="POST"
+                                    action="{{ url_for('repair_task_update_status', task_id=task.task_id) }}"
+                                    class="inline-form" style="display:inline-flex; align-items:center; gap:4px;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <select name="status"
+                                        style="padding: 3px 6px; font-size: 11px; border-radius: 4px; border: 1px solid #cbd5e1; background: white;">
+                                        {% for s in allowed_statuses %}
+                                        <option value="{{ s }}" {% if task.status==s %}selected{% endif %}>
+                                            {{ s }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="action-btn"
+                                        style="padding: 3px 6px; font-size: 10px;">Save</button>
+                                </form>
+                            </td>
+
+                            <!-- Score Breakdown Details -->
+                            <td>
+                                <details style="font-size: 11px; color: #475569; cursor: pointer;">
+                                    <summary style="font-weight: 600; color: #0369a1;">View Audit</summary>
+                                    <div
+                                        style="background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 8px; margin-top: 4px; line-height: 1.4; width: 220px;">
+                                        <div>• Flow Surge: <strong>+{{ task.score_breakdown.get('flow_anomaly_points',
+                                                0)|round(0) }}</strong> pts</div>
+                                        <div>• Pressure Drop: <strong>+{{
+                                                task.score_breakdown.get('pressure_anomaly_points', 0)|round(0)
+                                                }}</strong> pts</div>
+                                        <div>• Severity: <strong>+{{ task.score_breakdown.get('severity_points',
+                                                0)|round(0) }}</strong> pts</div>
+                                        <div>• Persistence: <strong>+{{ task.score_breakdown.get('persistence_points',
+                                                0)|round(0) }}</strong> pts</div>
+                                        <div>• Asset Capacity: <strong>+{{
+                                                task.score_breakdown.get('pipe_importance_points', 0)|round(0)
+                                                }}</strong> pts</div>
+                                        <div style="border-top: 1px dashed #cbd5e1; margin-top: 4px; padding-top: 2px;">
+                                            Total: <strong>{{ task.priority_score }}</strong> / 100
+                                        </div>
+                                    </div>
+                                </details>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="nw-empty">
+                <span class="nw-empty-icon">✓</span>
+                <p>No active repair tasks in the queue.</p>
+                <p class="muted">All monitored pipes are operating within normal baseline bounds or pending tasks have
+                    been completed.</p>
+                <p class="muted" style="margin-top: 6px;">
+                    Simulate a leak via the <a href="/sensor-simulator">Sensor Simulator</a> and run the <a
+                        href="/leak-detection">Leak Detection Engine</a> to generate suspected leak events.
+                </p>
+            </div>
+            {% endif %}
+        </section>
+
+        <!-- ── All Tasks & History (Optional Inspection) ────────────────── -->
+        {% if all_tasks and all_tasks|length > ordered_tasks|length %}
+        <section class="panel nw-table-panel" style="margin-top: 24px;">
+            <details>
+                <summary style="font-weight: 700; font-size: 14px; cursor: pointer; padding: 4px 0;">
+                    📁 Completed & Historical Tasks Archive ({{ all_tasks|length - ordered_tasks|length }} completed)
+                </summary>
+                <div class="table-wrap" style="margin-top: 12px;">
+                    <table class="nw-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Pipe Name</th>
+                                <th>Score</th>
+                                <th>Category</th>
+                                <th>Status</th>
+                                <th>Updated At</th>
+                                <th>Re-open Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for t in all_tasks %}
+                            {% if t.status == 'Completed' %}
+                            <tr>
+                                <td class="nw-id">Task #{{ t.task_id }}</td>
+                                <td><strong>{{ t.pipe_name }}</strong></td>
+                                <td>{{ t.priority_score }}</td>
+                                <td><span class="severity">{{ t.priority_category }}</span></td>
+                                <td><span class="status-pill status-active">Completed</span></td>
+                                <td class="nw-date">{{ t.updated_at[:19].replace('T', ' ') }}</td>
+                                <td>
+                                    <form method="POST"
+                                        action="{{ url_for('repair_task_update_status', task_id=t.task_id) }}"
+                                        class="inline-form">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="status" value="In Progress">
+                                        <button type="submit" class="action-btn"
+                                            style="font-size: 11px;">Re-open</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </details>
+        </section>
+        {% endif %}
+
+        <!-- ── Lifecycle Transition History ─────────────────────────────── -->
+        <section class="panel nw-table-panel" style="margin-top: 24px;" aria-label="Lifecycle Transition History">
+            <div class="panel-header"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div>
+                    <h2>📋 Lifecycle History</h2>
+                    <p class="muted">Immutable chronological audit log of all repair task and suspected leak event state
+                        transitions.</p>
+                </div>
+                <span class="tag">{{ lifecycle_logs|length if lifecycle_logs else 0 }} logged transitions</span>
+            </div>
+
+            {% if lifecycle_logs and lifecycle_logs|length > 0 %}
+            <div class="table-wrap">
+                <table class="nw-table">
+                    <thead>
+                        <tr>
+                            <th>Audit #</th>
+                            <th>Entity Type</th>
+                            <th>Target ID</th>
+                            <th>Pipe Name</th>
+                            <th>Status Transition</th>
+                            <th>Action Description</th>
+                            <th>Changed At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in lifecycle_logs %}
+                        <tr>
+                            <td class="nw-id">Log #{{ log.audit_id }}</td>
+                            <td>
+                                {% if log.entity_type == 'repair_task' %}
+                                <span class="tag"
+                                    style="background: #e0f2fe; color: #0369a1; border-color: #bae6fd; font-weight: 600;">Repair
+                                    Task</span>
+                                {% else %}
+                                <span class="tag"
+                                    style="background: #fef3c7; color: #92400e; border-color: #fde68a; font-weight: 600;">Leak
+                                    Event</span>
+                                {% endif %}
+                            </td>
+                            <td><strong>#{{ log.entity_id }}</strong></td>
+                            <td><strong>{{ log.pipe_name }}</strong></td>
+                            <td>
+                                <div style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px;">
+                                    {% if log.previous_status %}
+                                    <span class="status-pill"
+                                        style="background: #f1f5f9; color: #475569; padding: 2px 6px; font-size: 11px;">{{
+                                        log.previous_status }}</span>
+                                    {% else %}
+                                    <span class="status-pill"
+                                        style="background: #f8fafc; color: #94a3b8; padding: 2px 6px; font-size: 11px;">Initial</span>
+                                    {% endif %}
+                                    <span style="color: #94a3b8; font-weight: bold;">&rarr;</span>
+                                    <span class="status-pill status-active"
+                                        style="padding: 2px 6px; font-size: 11px;">{{ log.new_status }}</span>
+                                </div>
+                            </td>
+                            <td style="font-size: 12px; color: #334155;">{{ log.action_description }}</td>
+                            <td class="nw-date">{{ log.changed_at[:19].replace('T', ' ') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="nw-empty" style="padding: 24px 16px;">
+                <span class="nw-empty-icon" style="font-size: 24px;">📋</span>
+                <p>No lifecycle transitions recorded yet.</p>
+                <p class="muted">Status changes initiated from the dispatch queue or leak detection log will appear here
+                    automatically.</p>
+            </div>
+            {% endif %}
+        </section>
+
+        <footer>
+            AQUAGRID · MCA PROJECT PROTOTYPE · SMART REPAIR PRIORITY QUEUE · PURE LIST-BASED MAX HEAP (DSA)
+        </footer>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>

@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Network | AquaGrid</title>
+    <meta name="description"
+        content="Manage water network nodes — tanks, junctions, and valves — in the AquaGrid platform.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'network' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <!-- ── Top bar ─────────────────────────────────────────────────── -->
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">WATER INTELLIGENCE PLATFORM</p>
+                <h1>Water Network</h1>
+                <p class="muted">Add, edit and manage the physical nodes that make up your distribution network.</p>
+            </div>
+            <span class="status"><span></span> DATABASE BACKED</span>
+        </header>
+
+        <!-- ── Flash messages ──────────────────────────────────────────── -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-list" role="alert" aria-live="polite">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                <span class="flash-icon">{% if category == 'success' %}✓{% else %}⚠{% endif %}</span>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- ── Add-node form ───────────────────────────────────────────── -->
+        <section class="panel nw-form-panel" aria-labelledby="form-heading">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="form-heading">Add Network Node</h2>
+                    <p class="muted">All fields except Location are required.</p>
+                </div>
+            </div>
+
+            <form method="POST" action="{{ url_for('network_create') }}" class="nw-form" novalidate
+                id="add-node-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="name">Node Name <span class="req">*</span></label>
+                        <input type="text" id="name" name="name" maxlength="120"
+                            placeholder="e.g. Tank Alpha-01" required autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="node_type">Node Type <span class="req">*</span></label>
+                        <select id="node_type" name="node_type" required>
+                            <option value="" disabled selected>Select type…</option>
+                            {% for t in allowed_types %}
+                            <option value="{{ t }}">{{ t | capitalize }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="location">Location</label>
+                        <input type="text" id="location" name="location" maxlength="200"
+                            placeholder="e.g. Zone 3 / Grid B-7" autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="status">Status <span class="req">*</span></label>
+                        <select id="status" name="status" required>
+                            {% for s in allowed_statuses %}
+                            <option value="{{ s }}" selected>{{ s | capitalize }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="primary-button nw-submit-btn" id="add-node-btn">
+                    ＋ Add Node
+                </button>
+            </form>
+        </section>
+
+        <!-- ── Node table ──────────────────────────────────────────────── -->
+        <section class="panel nw-table-panel" aria-labelledby="table-heading">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="table-heading">Network Nodes</h2>
+                    <p class="muted">
+                        {% if nodes %}
+                        {{ nodes | length }} node{{ 's' if nodes | length != 1 else '' }} registered
+                        {% else %}
+                        No nodes yet — add your first one above.
+                        {% endif %}
+                    </p>
+                </div>
+                <span class="tag">{{ nodes | length }} total</span>
+            </div>
+
+            {% if nodes %}
+            <div class="table-wrap">
+                <table class="nw-table" id="nodes-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Location</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for node in nodes %}
+                        <tr>
+                            <td class="nw-id">{{ node.id }}</td>
+                            <td class="nw-name">{{ node.name }}</td>
+                            <td>
+                                <span class="type-badge type-{{ node.node_type }}">
+                                    {{ node.node_type | capitalize }}
+                                </span>
+                            </td>
+                            <td class="nw-location">{{ node.location or '—' }}</td>
+                            <td>
+                                <span class="status-pill status-{{ node.status }}">
+                                    {{ node.status | capitalize }}
+                                </span>
+                            </td>
+                            <td class="nw-date">{{ node.created_at[:10] }}</td>
+                            <td class="nw-actions">
+                                <a href="{{ url_for('network_edit', node_id=node.id) }}"
+                                    class="action-btn edit-btn" id="edit-node-{{ node.id }}">Edit</a>
+
+                                <!-- Delete – POST only, no GET -->
+                                <form method="POST"
+                                    action="{{ url_for('network_delete', node_id=node.id) }}"
+                                    class="inline-form"
+                                    id="delete-form-{{ node.id }}"
+                                    onsubmit="return confirm('Delete node \'{{ node.name }}\'? This cannot be undone.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="action-btn delete-btn"
+                                        id="delete-node-{{ node.id }}">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="nw-empty">
+                <span class="nw-empty-icon">🔵</span>
+                <p>Your network has no nodes yet.</p>
+                <p class="muted">Use the form above to register your first tank, junction, or valve.</p>
+            </div>
+            {% endif %}
+        </section>
+
+        <footer>
+            AQUAGRID · MCA PROJECT PROTOTYPE · ALL DISPLAYED METRICS ARE DEMONSTRATION DATA
+        </footer>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AquaGrid | Water Intelligence</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'overview' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content" id="overview">
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">WATER INTELLIGENCE PLATFORM</p>
+                <h1>Water Network Overview</h1>
+                <p class="muted">Monitor distribution, investigate anomalies and prioritize repairs.</p>
+            </div>
+            <span class="status"><span></span> SIMULATION MODE</span>
+        </header>
+
+        <section class="welcome">
+            <div>
+                <p class="eyebrow">SMART WATER. SMARTER CITIES.</p>
+                <h2>Every drop deserves to count.</h2>
+                <p>Identify suspected leaks, understand network impact and support fairer water distribution.</p>
+            </div>
+            <div class="water-icon">💧</div>
+        </section>
+
+        <section class="metrics" aria-label="Demo metrics">
+            <article class="metric">
+                <p>Total Network Nodes</p>
+                <h2>{{ node_count }}</h2>
+                <span>Live · database count</span>
+            </article>
+            <article class="metric">
+                <p>Suspected Leaks</p>
+                <h2 id="leak-count" style="color: {% if open_leaks_count > 0 %}#dc2626{% else %}#059669{% endif %};">
+                    {{ open_leaks_count }}
+                </h2>
+                <span class="{% if open_leaks_count > 0 %}warning-text{% endif %}">
+                    {% if open_leaks_count > 0 %}Requires investigation{% else %}All systems nominal{% endif %}
+                </span>
+            </article>
+            <article class="metric">
+                <p>Estimated Water Loss</p>
+                <h2>1,250 <small>L/hr</small></h2>
+                <span>Simulated estimate</span>
+            </article>
+            <article class="metric">
+                <p>Pending Repairs</p>
+                <h2 style="color: {% if pending_repairs_count > 0 %}#dc2626{% else %}#059669{% endif %};">
+                    {{ pending_repairs_count }}
+                </h2>
+                <span>{{ active_repairs_count }} active in queue</span>
+            </article>
+        </section>
+
+        <section class="content-grid">
+            <article class="panel" id="network">
+                <div class="panel-heading">
+                    <div>
+                        <h3>Network Overview</h3>
+                        <p class="muted">Illustrative network · Not live sensor data</p>
+                    </div>
+                    <span class="tag">{{ node_count }} nodes</span>
+                </div>
+                <div class="network-placeholder">
+                    <div class="network-line line-one"></div>
+                    <div class="network-line line-two"></div>
+                    <div class="network-line line-three"></div>
+                    <div class="node node-a">Tank A</div>
+                    <div class="node node-b">Junction B</div>
+                    <div class="node node-c leak-node">Pipe C ⚠</div>
+                    <div class="node node-d">Zone D</div>
+                    <p class="map-caption">Interactive graph visualization will be added in a later phase. <a href="/graph" style="color: #2b6cb0; font-weight: 700; text-decoration: underline;">Open Graph Explorer &rarr;</a></p>
+                </div>
+            </article>
+
+            <article class="panel" id="alerts">
+                <div class="panel-heading">
+                    <div>
+                        <h3>Recent Leak Alerts</h3>
+                        <p class="muted">Illustrative incidents</p>
+                    </div>
+                    <span class="tag alert-tag">3 alerts</span>
+                </div>
+                <div class="alert-row">
+                    <span class="alert-dot high"></span>
+                    <div><strong>Pipe C-102</strong>
+                        <p>High anomaly score · Zone 2</p>
+                    </div>
+                    <span class="severity">High</span>
+                </div>
+                <div class="alert-row">
+                    <span class="alert-dot medium"></span>
+                    <div><strong>Pipe B-014</strong>
+                        <p>Flow imbalance · Zone 1</p>
+                    </div>
+                    <span class="severity medium-label">Medium</span>
+                </div>
+                <div class="alert-row">
+                    <span class="alert-dot medium"></span>
+                    <div><strong>Pipe D-008</strong>
+                        <p>Unusual reading · Zone 4</p>
+                    </div>
+                    <span class="severity medium-label">Medium</span>
+                </div>
+                <button id="simulate-btn" class="primary-button">＋ Simulate Demo Leak</button>
+                <p id="simulation-message" class="muted" aria-live="polite"></p>
+            </article>
+        </section>
+
+        <section class="panel repair-panel" id="repairs">
+            <div class="panel-heading">
+                <div>
+                    <h3>Repair Priority Queue</h3>
+                    <p class="muted">Live priority ordering powered by AquaGrid's custom Max Heap.</p>
+                </div>
+                <a href="/repairs" class="tag" style="text-decoration:none; color:inherit; font-weight:700;">View Full Queue &rarr;</a>
+            </div>
+            {% if top_repair_tasks %}
+                {% for task in top_repair_tasks %}
+                <div class="repair-row">
+                    <span class="priority-badge">{{ '%02d'|format(loop.index) }}</span>
+                    <strong>{{ task.pipe_name }}</strong>
+                    <span class="severity {% if task.priority_category in ['CRITICAL', 'HIGH'] %}severity-high{% else %}severity-medium{% endif %}">
+                        {{ task.priority_category }} ({{ task.priority_score }})
+                    </span>
+                    <span class="status-pill {% if task.status == 'In Progress' %}status-active{% endif %}" style="font-size:11px; margin-left: auto;">
+                        {{ task.status }}
+                    </span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="muted" style="padding: 12px 0;">No active repair tasks in the queue. All pipes operating normally.</p>
+            {% endif %}
+        </section>
+
+        <footer id="analytics">
+            AQUAGRID · MCA PROJECT PROTOTYPE · ALL DISPLAYED METRICS ARE DEMONSTRATION DATA
+        </footer>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>

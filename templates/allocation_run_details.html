@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Allocation Run #{{ run['run_id'] }} | AquaGrid</title>
+    <meta name="description" content="Detailed historical fair water allocation run report and per-zone audit snapshots.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/graph.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/allocation.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'allocation' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <!-- ── Top bar ─────────────────────────────────────────────────── -->
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">HISTORICAL AUDIT SNAPSHOT · RUN #{{ run['run_id'] }}</p>
+                <h1>Allocation Run Details</h1>
+                <p class="muted">Executed on {{ run['run_timestamp'] }} · Policy: 
+                    <span class="policy-badge {% if run['allocation_policy'] == 'ABUNDANT_SUPPLY' %}policy-abundant{% elif run['allocation_policy'] == 'WEIGHTED_MAX_MIN_RESIDUAL' %}policy-constrained{% elif run['allocation_policy'] == 'EMERGENCY_ESSENTIAL_PROPORTIONAL' %}policy-deficit{% else %}policy-fallback{% endif %}">
+                        {{ run['allocation_policy'] }}
+                    </span>
+                </p>
+            </div>
+            <a href="{{ url_for('allocation') }}" class="back-link" id="back-to-allocation">← Back to Allocation Dashboard</a>
+        </header>
+
+        <!-- ── Flash messages ──────────────────────────────────────────── -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-list" role="alert" aria-live="polite">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                <span class="flash-icon">{% if category == 'success' %}✓{% elif category == 'warning' %}⚠{% else %}✕{% endif %}</span>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- ── Simulation Disclaimer Banner ───────────────────── -->
+        <section class="simulation-banner" role="region" aria-label="Fair Water Allocation Notice" style="margin-bottom: 24px;">
+            <span class="sim-icon">⚖</span>
+            <div>
+                <div class="sim-title">Historical Allocation Snapshot Notice</div>
+                <p class="sim-text">
+                    Fair Water Allocation Simulation: This module calculates fair volumetric water entitlements under limited supply using weighted max-min fairness. It does not perform physical hydraulic flow or pressure optimization.
+                    Historical records preserve the exact zone name and demand snapshots captured at execution time.
+                </p>
+            </div>
+        </section>
+
+        <!-- ── Summary KPI Cards ────────────────────────────────────────── -->
+        <section class="metrics" aria-label="Run Metrics" style="margin-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;">
+            <article class="metric">
+                <p>Available Bulk Supply</p>
+                <h2 style="color: #0284c7;">
+                    {{ "{:,.2f}".format(run['total_available_supply_l']) }} <small style="font-size: 13px; font-weight: normal;">L</small>
+                </h2>
+                <span>Input supply volume</span>
+            </article>
+
+            <article class="metric">
+                <p>Total Requested Demand</p>
+                <h2 style="color: #475569;">
+                    {{ "{:,.2f}".format(run['total_requested_demand_l']) }} <small style="font-size: 13px; font-weight: normal;">L</small>
+                </h2>
+                <span>Across {{ run['active_zone_count'] }} zones</span>
+            </article>
+
+            <article class="metric">
+                <p>Total Allocated Water</p>
+                <h2 style="color: #16a34a;">
+                    {{ "{:,.2f}".format(run['total_allocated_l']) }} <small style="font-size: 13px; font-weight: normal;">L</small>
+                </h2>
+                <span>{{ "{:.1f}".format(run['satisfaction_rate_pct']) }}% aggregate satisfaction</span>
+            </article>
+
+            <article class="metric">
+                <p>Total Unmet Demand</p>
+                <h2 style="color: {% if run['total_unmet_l'] > 0 %}#dc2626{% else %}#16a34a{% endif %};">
+                    {{ "{:,.2f}".format(run['total_unmet_l']) }} <small style="font-size: 13px; font-weight: normal;">L</small>
+                </h2>
+                <span>
+                    {% if run['total_unmet_l'] > 0 %}
+                    Deficit under supply constraint
+                    {% else %}
+                    Zero deficit
+                    {% endif %}
+                </span>
+            </article>
+
+            <article class="metric">
+                <p>Active Zones Dispatched</p>
+                <h2 style="color: #2563eb;">{{ run['active_zone_count'] }}</h2>
+                <span>Snapshot records saved</span>
+            </article>
+        </section>
+
+        <!-- ── Run Operational Meta ────────────────────────────────────── -->
+        <section class="panel alloc-panel" style="margin-bottom: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; font-size: 13px;">
+                <div>
+                    <span class="muted">Run Identification:</span>
+                    <strong>Run #{{ run['run_id'] }}</strong>
+                </div>
+                <div>
+                    <span class="muted">Execution Timestamp:</span>
+                    <strong>{{ run['run_timestamp'] }}</strong>
+                </div>
+                <div>
+                    <span class="muted">Dispatch Period:</span>
+                    <strong>
+                        {% if run['period_start'] or run['period_end'] %}
+                        {{ run['period_start'] or 'Start' }} → {{ run['period_end'] or 'End' }}
+                        {% else %}
+                        Unspecified
+                        {% endif %}
+                    </strong>
+                </div>
+                <div>
+                    <span class="muted">Operational Notes:</span>
+                    <strong>{{ run['notes'] or 'None recorded' }}</strong>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Per-Zone Allocations Table ──────────────────────────────── -->
+        <section class="panel alloc-panel">
+            <div class="alloc-panel-header">
+                <div>
+                    <h3>Per-Zone Dispatched Allocations</h3>
+                    <p>Audit snapshot of individual zone allocations, demands, and satisfaction rates preserved from run execution.</p>
+                </div>
+                <span class="tag">{{ allocations|length }} Allocation Records</span>
+            </div>
+
+            {% if allocations %}
+            <div class="table-wrap">
+                <table class="nw-table" aria-label="Run Allocations Table">
+                    <thead>
+                        <tr>
+                            <th>Zone Name (Snapshot)</th>
+                            <th style="text-align: right;">Demand (L)</th>
+                            <th style="text-align: right;">Essential (L)</th>
+                            <th style="text-align: center;">Weight</th>
+                            <th style="text-align: right;">Allocated (L)</th>
+                            <th style="text-align: right;">Unmet (L)</th>
+                            <th style="min-width: 160px;">Satisfaction</th>
+                            <th>Status & Tier</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in allocations %}
+                        <tr>
+                            <td>
+                                <strong>{{ a['zone_name_snapshot'] }}</strong>
+                                {% if a['priority_category'] %}
+                                <br><span class="category-tag category-{{ a['priority_category'] }}">{{ a['priority_category'] }}</span>
+                                {% endif %}
+                            </td>
+                            <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(a['requested_demand_l']) }}
+                            </td>
+                            <td style="text-align: right; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(a['essential_min_l']) }}
+                            </td>
+                            <td style="text-align: center; font-weight: 700;">
+                                {{ "{:.1f}".format(a['fairness_weight']) }}×
+                            </td>
+                            <td style="text-align: right; font-weight: 700; color: #0284c7; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(a['allocated_amount_l']) }}
+                            </td>
+                            <td style="text-align: right; color: {% if a['unmet_demand_l'] > 0 %}#dc2626{% else %}#16a34a{% endif %}; font-variant-numeric: tabular-nums;">
+                                {{ "{:,.2f}".format(a['unmet_demand_l']) }}
+                            </td>
+                            <td>
+                                <div class="alloc-progress-container">
+                                    <div class="alloc-progress-bar">
+                                        <div class="alloc-progress-fill {% if a['satisfaction_rate_pct'] >= 90 %}progress-high{% elif a['satisfaction_rate_pct'] >= 50 %}progress-mid{% else %}progress-low{% endif %}"
+                                            style="width: {{ a['satisfaction_rate_pct'] }}%;">
+                                        </div>
+                                    </div>
+                                    <span class="alloc-progress-text" style="color: {% if a['satisfaction_rate_pct'] >= 90 %}#16a34a{% elif a['satisfaction_rate_pct'] >= 50 %}#d97706{% else %}#dc2626{% endif %};">
+                                        {{ "{:.1f}".format(a['satisfaction_rate_pct']) }}%
+                                    </span>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="explanation-text">
+                                    {% if a['is_bottleneck'] %}
+                                    <span style="color: #16a34a; font-weight: 700;">✓ Saturated (Tier {{ a['tier_reached'] }})</span>
+                                    {% elif a['tier_reached'] == 2 %}
+                                    <span style="color: #0284c7; font-weight: 700;">Residual Water-Filled (Tier 2)</span>
+                                    {% elif a['tier_reached'] == 1 %}
+                                    <span style="color: #d97706; font-weight: 700;">Essential Met (Tier 1)</span>
+                                    {% else %}
+                                    <span style="color: #dc2626; font-weight: 700;">Emergency Rationing (Tier 0)</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <h4>No Per-Zone Records Found</h4>
+                <p>No per-zone allocation records were recorded for this run.</p>
+            </div>
+            {% endif %}
+        </section>
+
+    </main>
+</body>
+
+</html>
+

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pipe Management | AquaGrid</title>
+    <meta name="description"
+        content="Manage water distribution pipes — add, edit and delete connections between network nodes in AquaGrid.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'pipes' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <!-- ── Top bar ─────────────────────────────────────────────────── -->
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">WATER INTELLIGENCE PLATFORM</p>
+                <h1>Pipe Management</h1>
+                <p class="muted">Connect network nodes with pipes. Each pipe stores length, capacity, and a routing
+                    cost used by future path-finding algorithms.</p>
+            </div>
+            <span class="status"><span></span> DATABASE BACKED</span>
+        </header>
+
+        <!-- ── Flash messages ──────────────────────────────────────────── -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-list" role="alert" aria-live="polite">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                <span class="flash-icon">{% if category == 'success' %}✓{% else %}⚠{% endif %}</span>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- ── Add-pipe form ───────────────────────────────────────────── -->
+        <section class="panel nw-form-panel" aria-labelledby="pipe-form-heading">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="pipe-form-heading">Add Pipe</h2>
+                    <p class="muted">All fields are required. From-node and To-node must be different existing nodes.
+                    </p>
+                </div>
+            </div>
+
+            <form method="POST" action="{{ url_for('pipes_create') }}" class="nw-form" novalidate id="add-pipe-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <!-- Row 1: name, from, to, status -->
+                <div class="form-row pipe-form-row-1">
+                    <div class="form-group">
+                        <label for="pipe-name">Pipe Name <span class="req">*</span></label>
+                        <input type="text" id="pipe-name" name="name" maxlength="120" placeholder="e.g. Main-Trunk-01"
+                            required autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="from_node_id">From Node <span class="req">*</span></label>
+                        <select id="from_node_id" name="from_node_id" required>
+                            <option value="" disabled selected>Select node…</option>
+                            {% for node_id, node_name in node_map.items() %}
+                            <option value="{{ node_id }}">{{ node_name }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if not node_map %}
+                        <span class="field-hint">No nodes yet — <a href="/network">add nodes first</a>.</span>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="to_node_id">To Node <span class="req">*</span></label>
+                        <select id="to_node_id" name="to_node_id" required>
+                            <option value="" disabled selected>Select node…</option>
+                            {% for node_id, node_name in node_map.items() %}
+                            <option value="{{ node_id }}">{{ node_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pipe-status">Status <span class="req">*</span></label>
+                        <select id="pipe-status" name="status" required>
+                            {% for s in allowed_statuses %}
+                            <option value="{{ s }}" {% if s=='active' %}selected{% endif %}>{{ s | capitalize }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Row 2: length, capacity, cost -->
+                <div class="form-row pipe-form-row-2">
+                    <div class="form-group">
+                        <label for="length_m">Length (metres) <span class="req">*</span></label>
+                        <input type="number" id="length_m" name="length_m" min="0.01" step="any"
+                            placeholder="e.g. 250.5" required autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="capacity_lpm">Capacity (L/min) <span class="req">*</span></label>
+                        <input type="number" id="capacity_lpm" name="capacity_lpm" min="0.01" step="any"
+                            placeholder="e.g. 500" required autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cost">
+                            Routing Cost (units) <span class="req">*</span>
+                            <span class="cost-hint"
+                                title="Configurable edge weight for routing algorithms (Dijkstra). Positive value (e.g. 1.0 unit per 100m). Not a financial value and not live sensor data.">ℹ</span>
+                        </label>
+                        <input type="number" id="cost" name="cost" min="0.01" step="any" value="1" required
+                            autocomplete="off">
+                        <span class="field-hint">Algorithm weight in units (Default: 1.0 unit per 100 m) · positive · not financial cost</span>
+                    </div>
+                </div>
+
+                <button type="submit" class="primary-button nw-submit-btn" id="add-pipe-btn">
+                    ＋ Add Pipe
+                </button>
+            </form>
+        </section>
+
+        <!-- ── Pipe table ──────────────────────────────────────────────── -->
+        <section class="panel nw-table-panel" aria-labelledby="pipe-table-heading">
+            <div class="panel-heading">
+                <div>
+                    <h2 id="pipe-table-heading">Registered Pipes</h2>
+                    <p class="muted">
+                        {% if pipes %}
+                        {{ pipes | length }} pipe{{ 's' if pipes | length != 1 else '' }} registered
+                        {% else %}
+                        No pipes yet — add your first one above.
+                        {% endif %}
+                    </p>
+                </div>
+                <span class="tag">{{ pipes | length }} total</span>
+            </div>
+
+            {% if pipes %}
+            <div class="table-wrap">
+                <table class="nw-table" id="pipes-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Name</th>
+                            <th>From Node</th>
+                            <th>To Node</th>
+                            <th>Length (m)</th>
+                            <th>Capacity (L/min)</th>
+                            <th>Routing Cost (units)</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pipe in pipes %}
+                        <tr>
+                            <td class="nw-id">{{ pipe.id }}</td>
+                            <td class="nw-name">{{ pipe.name }}</td>
+                            <td class="pipe-node-cell">
+                                <span class="pipe-node-tag">{{ pipe.from_node_name }}</span>
+                            </td>
+                            <td class="pipe-node-cell">
+                                <span class="pipe-node-tag">{{ pipe.to_node_name }}</span>
+                            </td>
+                            <td class="pipe-metric">{{ "%.1f"|format(pipe.length_m) }}</td>
+                            <td class="pipe-metric">{{ "%.1f"|format(pipe.capacity_lpm) }}</td>
+                            <td class="pipe-cost" title="Routing algorithm weight in units — not financial cost">
+                                {{ "%.2f"|format(pipe.cost) }} units
+                            </td>
+                            <td>
+                                <span class="status-pill status-{{ pipe.status }}">
+                                    {{ pipe.status | capitalize }}
+                                </span>
+                            </td>
+                            <td class="nw-date">{{ pipe.created_at[:10] }}</td>
+                            <td class="nw-actions">
+                                <a href="{{ url_for('pipes_edit', pipe_id=pipe.id) }}" class="action-btn edit-btn"
+                                    id="edit-pipe-{{ pipe.id }}">Edit</a>
+
+                                <!-- Delete – POST only, no GET -->
+                                <form method="POST" action="{{ url_for('pipes_delete', pipe_id=pipe.id) }}"
+                                    class="inline-form" id="delete-pipe-form-{{ pipe.id }}"
+                                    onsubmit="return confirm('Delete pipe \'{{ pipe.name }}\'? This cannot be undone.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="action-btn delete-btn"
+                                        id="delete-pipe-{{ pipe.id }}">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="nw-empty">
+                <span class="nw-empty-icon">🔗</span>
+                <p>No pipes registered yet.</p>
+                <p class="muted">Use the form above to connect your first pair of nodes.</p>
+                {% if not node_map %}
+                <p class="muted"><a href="/network">Add at least two nodes</a> before creating a pipe.</p>
+                {% endif %}
+            </div>
+            {% endif %}
+        </section>
+
+        <footer>
+            AQUAGRID · MCA PROJECT PROTOTYPE · ALL DISPLAYED METRICS ARE DEMONSTRATION DATA · ROUTING COST IS AN
+            ALGORITHM WEIGHT, NOT A FINANCIAL VALUE
+        </footer>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>

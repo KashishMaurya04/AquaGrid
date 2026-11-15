@@ -1,0 +1,514 @@
+/* ============================================================
+   network.css – Water Network page styles
+   Extends style.css; never overrides dashboard-specific rules.
+   ============================================================ */
+
+/* ── Flash messages ─────────────────────────────────────────── */
+.flash-list {
+    margin: 20px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.flash {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    animation: flashIn 0.25s ease;
+}
+
+@keyframes flashIn {
+    from {
+        opacity: 0;
+        transform: translateY(-6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.flash-success {
+    background: #e0f6f1;
+    color: #147e71;
+    border: 1px solid #b3e8de;
+}
+
+.flash-warning {
+    background: #fffbeb;
+    color: #b45309;
+    border: 1px solid #fde68a;
+}
+
+.flash-info {
+    background: #f0f9ff;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+}
+
+.flash-error {
+    background: #fff0ef;
+    color: #c14b4b;
+    border: 1px solid #f5c6c6;
+}
+
+.flash-icon {
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+/* ── Form panel ─────────────────────────────────────────────── */
+.nw-form-panel {
+    margin: 24px 0 18px;
+}
+
+.nw-form-panel h2 {
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
+.nw-form {
+    margin-top: 20px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.form-group label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #3a5468;
+    letter-spacing: 0.2px;
+}
+
+.req {
+    color: #c14b4b;
+}
+
+.form-group input,
+.form-group select {
+    padding: 10px 12px;
+    border: 1.5px solid #d1dde7;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #172d43;
+    background: #f9fbfd;
+    transition: border-color 0.18s, box-shadow 0.18s;
+    outline: none;
+    font-family: inherit;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+    border-color: #36aaa4;
+    box-shadow: 0 0 0 3px #36aaa420;
+    background: white;
+}
+
+.form-group input::placeholder {
+    color: #aab8c4;
+}
+
+.nw-submit-btn {
+    width: auto;
+    padding: 11px 28px;
+    border-radius: 9px;
+    font-size: 13px;
+    letter-spacing: 0.3px;
+}
+
+/* ── Table panel ─────────────────────────────────────────────── */
+.nw-table-panel {
+    margin-bottom: 22px;
+}
+
+.nw-table-panel h2 {
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
+.table-wrap,
+.nw-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 20px;
+    border-radius: 10px;
+    border: 1px solid #e4ebf0;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.nw-table {
+    width: 100%;
+    min-width: 650px;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.nw-table th {
+    background: #f3f7fa;
+    color: #5a728a;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    padding: 11px 14px;
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid #e4ebf0;
+}
+
+.nw-table td {
+    padding: 13px 14px;
+    border-bottom: 1px solid #f0f4f7;
+    vertical-align: middle;
+    color: #2a4158;
+}
+
+.nw-table tr:last-child td {
+    border-bottom: none;
+}
+
+.nw-table tbody tr {
+    transition: background 0.13s;
+}
+
+.nw-table tbody tr:hover {
+    background: #f6fbfb;
+}
+
+.nw-id {
+    color: #8a9bac;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.nw-name {
+    font-weight: 700;
+    color: #172d43;
+}
+
+.nw-location {
+    color: #6d8092;
+    font-size: 12px;
+}
+
+.nw-date {
+    color: #8a9bac;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+/* ── Type badges ─────────────────────────────────────────────── */
+.type-badge {
+    display: inline-block;
+    padding: 4px 9px;
+    border-radius: 5px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+
+.type-tank {
+    background: #e0f0ff;
+    color: #1a5fa8;
+}
+
+.type-junction {
+    background: #e8f7f0;
+    color: #1a7a54;
+}
+
+.type-valve {
+    background: #f5ecff;
+    color: #7a2fb5;
+}
+
+/* ── Status pills ─────────────────────────────────────────────── */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+}
+
+.status-pill::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-active {
+    background: #e0f6f1;
+    color: #147e71;
+}
+
+.status-active::before {
+    background: #18a78c;
+}
+
+.status-inactive {
+    background: #f3f4f6;
+    color: #6b7280;
+}
+
+.status-inactive::before {
+    background: #9ca3af;
+}
+
+/* ── Action buttons ──────────────────────────────────────────── */
+.nw-actions {
+    display: flex;
+    gap: 7px;
+    align-items: center;
+    white-space: nowrap;
+    min-width: 120px;
+    box-sizing: border-box;
+}
+
+.action-btn {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    border: none;
+    transition: opacity 0.15s, background 0.15s;
+    font-family: inherit;
+}
+
+.edit-btn {
+    background: #e8f5fe;
+    color: #1a6ea8;
+}
+
+.edit-btn:hover {
+    background: #cde7f9;
+}
+
+.delete-btn {
+    background: #fff0ef;
+    color: #c14b4b;
+}
+
+.delete-btn:hover {
+    background: #fdd8d8;
+}
+
+.inline-form {
+    display: inline;
+    margin: 0;
+    padding: 0;
+}
+
+/* ── Empty state ─────────────────────────────────────────────── */
+.nw-empty {
+    text-align: center;
+    padding: 52px 20px;
+    color: #8292a3;
+}
+
+.nw-empty-icon {
+    font-size: 40px;
+    display: block;
+    margin-bottom: 14px;
+    opacity: 0.5;
+}
+
+.nw-empty p {
+    font-size: 15px;
+    margin-bottom: 6px;
+    color: #5a728a;
+}
+
+/* ── Edit page extras ─────────────────────────────────────────── */
+.back-link {
+    color: #36aaa4;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.back-link:hover {
+    text-decoration: underline;
+}
+
+.edit-actions {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}
+
+.cancel-link {
+    font-size: 13px;
+    color: #8292a3;
+    text-decoration: none;
+}
+
+.cancel-link:hover {
+    color: #172d43;
+}
+
+/* ── Pipe-page extras ─────────────────────────────────────────── */
+
+/* Two-row form layout for the wider pipe form */
+.pipe-form-row-1 {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.pipe-form-row-2 {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Node reference badges inside the pipe table */
+.pipe-node-cell {
+    white-space: nowrap;
+}
+
+.pipe-node-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 5px;
+    background: #eef4fb;
+    color: #2a4f7a;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* Numeric columns */
+.pipe-metric {
+    font-variant-numeric: tabular-nums;
+    color: #2a4158;
+    font-size: 12px;
+}
+
+/* Routing cost column – neutral styling to distinguish from financial figures */
+.pipe-cost {
+    font-variant-numeric: tabular-nums;
+    color: #5a6878;
+    font-size: 12px;
+    cursor: help;
+}
+
+/* Small helper text beneath form inputs */
+.field-hint {
+    font-size: 10px;
+    color: #8292a3;
+    line-height: 1.4;
+    margin-top: 2px;
+}
+
+.field-hint a {
+    color: #36aaa4;
+    text-decoration: none;
+}
+
+.field-hint a:hover {
+    text-decoration: underline;
+}
+
+/* Info tooltip trigger next to Routing Cost label */
+.cost-hint {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    line-height: 14px;
+    text-align: center;
+    border-radius: 50%;
+    background: #d8eaf3;
+    color: #2a5f8a;
+    font-size: 9px;
+    font-weight: 800;
+    cursor: help;
+    vertical-align: middle;
+    margin-left: 3px;
+}
+
+/* ── Responsive tweaks ───────────────────────────────────────── */
+@media (max-width: 900px) {
+    .form-row {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (max-width: 600px) {
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .nw-table th:nth-child(6),
+    .nw-table td:nth-child(6) {
+        display: none;
+    }
+}
+
+/* ── Sensor badges & actions ────────────────────────────────── */
+.type-badge.type-flow_meter,
+.type-badge.type-flow {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.type-badge.type-pressure_sensor,
+.type-badge.type-pressure {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.action-btn.toggle-btn {
+    background: #f8fafc;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+    cursor: pointer;
+}
+
+.action-btn.toggle-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}

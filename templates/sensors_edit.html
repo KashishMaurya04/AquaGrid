@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Sensor | AquaGrid</title>
+    <meta name="description" content="Edit a water distribution telemetry sensor in AquaGrid.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'sensors' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">WATER INTELLIGENCE PLATFORM</p>
+                <h1>Edit Sensor</h1>
+                <p class="muted">Update details for <strong>{{ sensor.sensor_name }}</strong> (ID #{{ sensor.sensor_id }}).</p>
+            </div>
+            <a href="{{ url_for('sensors') }}" class="back-link" id="back-to-sensors">← Back to Sensors</a>
+        </header>
+
+        <!-- ── Flash messages ──────────────────────────────────────────── -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-list" role="alert" aria-live="polite">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                <span class="flash-icon">{% if category == 'success' %}✓{% else %}⚠{% endif %}</span>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <section class="panel nw-form-panel">
+            <form method="POST" action="{{ url_for('sensors_edit', sensor_id=sensor.sensor_id) }}" class="nw-form" novalidate id="edit-sensor-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="form-row pipe-form-row-1">
+                    <div class="form-group">
+                        <label for="sensor_name">Sensor Name <span class="req">*</span></label>
+                        <input type="text" id="sensor_name" name="sensor_name" maxlength="120"
+                            value="{{ sensor.sensor_name }}" required autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pipe_id">Installed On Pipe <span class="req">*</span></label>
+                        <select id="pipe_id" name="pipe_id" required>
+                            {% for pid, label in pipe_map.items() %}
+                            <option value="{{ pid }}" {% if sensor.pipe_id == pid %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sensor_type">Sensor Type <span class="req">*</span></label>
+                        <select id="sensor_type" name="sensor_type" required>
+                            {% for t in allowed_types %}
+                            <option value="{{ t }}" {% if sensor.sensor_type == t %}selected{% endif %}>
+                                {% if t == 'flow_meter' %}Flow Meter (flow_meter){% elif t == 'pressure_sensor' %}Pressure Sensor (pressure_sensor){% else %}{{ t }}{% endif %}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="unit">Measurement Unit <span class="req">*</span></label>
+                        <input type="text" id="unit" name="unit" maxlength="30"
+                            value="{{ sensor.unit }}" required autocomplete="off">
+                        <span class="field-hint">e.g. L/min, m³/h for flow · psi, bar for pressure</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sensor_status">Status <span class="req">*</span></label>
+                        <select id="sensor_status" name="status" required>
+                            {% for s in allowed_statuses %}
+                            <option value="{{ s }}" {% if sensor.status == s %}selected{% endif %}>
+                                {{ s | capitalize }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="edit-actions">
+                    <button type="submit" class="primary-button nw-submit-btn" id="save-sensor-btn">
+                        ✓ Save Changes
+                    </button>
+                    <a href="{{ url_for('sensors') }}" class="cancel-link" id="cancel-sensor-edit">Cancel</a>
+                </div>
+            </form>
+        </section>
+
+        <footer>
+            AQUAGRID · MCA PROJECT PROTOTYPE · SENSOR MANAGEMENT
+        </footer>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>

@@ -1,0 +1,289 @@
+/* ============================================================
+   allocation.css – Fair Water Allocation Styles
+   AquaGrid Design System
+   ============================================================ */
+
+/* ── Policy Badges ─────────────────────────────────────────── */
+.policy-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.policy-abundant {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+}
+
+.policy-constrained {
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+}
+
+.policy-deficit {
+    background: #fef2f2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+
+.policy-fallback {
+    background: #fef3c7;
+    color: #b45309;
+    border: 1px solid #fde68a;
+}
+
+.policy-zero {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+}
+
+/* ── Priority Category Tags ────────────────────────────────── */
+.category-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.category-critical {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.category-standard {
+    background: #f1f5f9;
+    color: #334155;
+}
+
+.category-commercial {
+    background: #ede9fe;
+    color: #5b21b6;
+}
+
+.category-agricultural {
+    background: #ecfdf5;
+    color: #065f46;
+}
+
+/* ── Status Pills ──────────────────────────────────────────── */
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.status-pill.active {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-pill.inactive {
+    background: #f1f5f9;
+    color: #64748b;
+}
+
+/* ── Progress Bar ──────────────────────────────────────────── */
+.alloc-progress-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 120px;
+}
+
+.alloc-progress-bar {
+    flex: 1;
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 9999px;
+    overflow: hidden;
+    position: relative;
+}
+
+.alloc-progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 0.3s ease;
+}
+
+.progress-high {
+    background: #10b981;
+}
+
+.progress-mid {
+    background: #f59e0b;
+}
+
+.progress-low {
+    background: #ef4444;
+}
+
+.alloc-progress-text {
+    font-size: 12px;
+    font-weight: 700;
+    min-width: 48px;
+    text-align: right;
+}
+
+/* ── Doctrine & Explanation Cards ──────────────────────────── */
+.doctrine-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 14px;
+}
+
+.doctrine-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.doctrine-card h4 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.doctrine-card p {
+    margin: 0;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.5;
+}
+
+.doctrine-formula {
+    background: #ffffff;
+    border: 1px dashed #cbd5e1;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-family: monospace;
+    font-size: 11px;
+    color: #334155;
+    margin-top: 4px;
+}
+
+/* ── Allocation Form Layout ────────────────────────────────── */
+.alloc-panel {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.alloc-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.alloc-panel-header h3 {
+    margin: 0 0 4px 0;
+    font-size: 17px;
+    color: #0f172a;
+}
+
+.alloc-panel-header p {
+    margin: 0;
+    font-size: 13px;
+    color: #64748b;
+}
+
+/* ── Empty State ───────────────────────────────────────────── */
+.empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: #64748b;
+}
+
+.empty-state-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+}
+
+.empty-state h4 {
+    font-size: 15px;
+    color: #1e293b;
+    margin: 0 0 6px 0;
+}
+
+.empty-state p {
+    font-size: 13px;
+    margin: 0;
+    max-width: 440px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* ── Explanation Callout in Table ──────────────────────────── */
+.explanation-text {
+    font-size: 12px;
+    color: #475569;
+    line-height: 1.4;
+    max-width: 320px;
+}
+
+/* ── Action buttons ────────────────────────────────────────── */
+.btn-action-group {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 6px;
+    text-decoration: none;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.btn-sm-edit {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #cbd5e1;
+}
+
+.btn-sm-edit:hover {
+    background: #e2e8f0;
+}
+
+.btn-sm-delete {
+    background: #fff1f2;
+    color: #be123c;
+    border-color: #fecdd3;
+}
+
+.btn-sm-delete:hover {
+    background: #ffe4e6;
+}
+

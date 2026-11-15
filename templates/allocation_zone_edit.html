@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Zone | AquaGrid</title>
+    <meta name="description" content="Edit a water distribution zone configuration in the AquaGrid platform.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/allocation.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'allocation' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">WATER RESOURCE OPTIMIZATION</p>
+                <h1>Edit Allocation Zone</h1>
+                <p class="muted">Update configuration for <strong>{{ zone['zone_name'] }}</strong> (ID #{{ zone['zone_id'] }}). Historical allocation records will preserve their original snapshot name.</p>
+            </div>
+            <a href="{{ url_for('allocation') }}" class="back-link" id="back-to-allocation">← Back to Allocation</a>
+        </header>
+
+        <!-- ── Flash messages ──────────────────────────────────────────── -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-list" role="alert" aria-live="polite">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                <span class="flash-icon">{% if category == 'success' %}✓{% elif category == 'warning' %}⚠{% else %}✕{% endif %}</span>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <section class="panel nw-form-panel">
+            <form method="POST" action="{{ url_for('allocation_zone_edit', zone_id=zone['zone_id']) }}" class="nw-form" novalidate id="edit-zone-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="form-row">
+                    <div class="form-group" style="flex: 2;">
+                        <label for="zone_name">Zone Name <span class="req">*</span></label>
+                        <input type="text" id="zone_name" name="zone_name" required maxlength="120"
+                            value="{{ zone['zone_name'] }}" autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="node_id">Network Node (Optional)</label>
+                        <select id="node_id" name="node_id">
+                            <option value="">-- Unassigned --</option>
+                            {% for n in all_nodes %}
+                            <option value="{{ n['id'] }}" {% if zone['node_id'] == n['id'] %}selected{% endif %}>
+                                {{ n['name'] }} ({{ n['node_type'] }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="priority_category">Priority Category <span class="req">*</span></label>
+                        <select id="priority_category" name="priority_category" required>
+                            {% for cat in allowed_categories %}
+                            <option value="{{ cat }}" {% if zone['priority_category'] == cat %}selected{% endif %}>
+                                {{ cat | capitalize }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="requested_demand_l">Requested Demand (L) <span class="req">*</span></label>
+                        <input type="number" id="requested_demand_l" name="requested_demand_l" step="0.01" min="0" required
+                            value="{{ zone['requested_demand_l'] }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="essential_min_l">Essential Minimum (L) <span class="req">*</span></label>
+                        <input type="number" id="essential_min_l" name="essential_min_l" step="0.01" min="0" required
+                            value="{{ zone['essential_min_l'] }}">
+                        <small class="muted">Must be ≤ requested demand.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="fairness_weight">Fairness Weight <span class="req">*</span></label>
+                        <input type="number" id="fairness_weight" name="fairness_weight" step="0.1" min="0.1" required
+                            value="{{ zone['fairness_weight'] }}">
+                        <small class="muted">Multiplier for residual surplus water.</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="status">Status <span class="req">*</span></label>
+                        <select id="status" name="status" required>
+                            {% for s in allowed_statuses %}
+                            <option value="{{ s }}" {% if zone['status'] == s %}selected{% endif %}>
+                                {{ s | capitalize }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex: 3;">
+                        <label for="description">Description</label>
+                        <input type="text" id="description" name="description" maxlength="250"
+                            value="{{ zone['description'] or '' }}" placeholder="Optional notes">
+                    </div>
+                    <div class="form-group" style="flex: 1; align-self: flex-end; display: flex; gap: 8px;">
+                        <button type="submit" class="btn btn-primary" style="flex: 1;">Update Zone</button>
+                        <a href="{{ url_for('allocation') }}" class="btn btn-secondary" style="text-align: center; text-decoration: none; padding-top: 10px;">Cancel</a>
+                    </div>
+                </div>
+            </form>
+        </section>
+
+    </main>
+</body>
+
+</html>
+

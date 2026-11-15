@@ -1,0 +1,20 @@
+{% set current = active_page | default('', true) %}
+<aside class="sidebar">
+    <div class="brand">💧 AquaGrid</div>
+    <p class="nav-label">WORKSPACE</p>
+    <nav class="nav-scroll">
+        <a class="nav-link{% if current == 'overview' or (not current and request.path == '/') %} active{% endif %}" href="/">▦ Overview</a>
+        <a class="nav-link{% if current == 'network' or (not current and (request.path == '/network' or request.path.startswith('/network/'))) %} active{% endif %}" href="/network">⌘ Water Network</a>
+        <a class="nav-link{% if current == 'pipes' or (not current and (request.path == '/pipes' or request.path.startswith('/pipes/'))) %} active{% endif %}" href="/pipes">🔗 Pipe Management</a>
+        <a class="nav-link{% if current == 'sensors' or (not current and (request.path == '/sensors' or request.path.startswith('/sensors/'))) %} active{% endif %}" href="/sensors">📡 Sensor Management</a>
+        <a class="nav-link{% if current in ['simulator', 'sensor_simulator', 'sensor-simulator'] or (not current and (request.path == '/sensor-simulator' or request.path.startswith('/sensor-simulator/'))) %} active{% endif %}" href="/sensor-simulator">⚡ Sensor Simulator</a>
+        <a class="nav-link{% if current == 'graph' or (not current and (request.path == '/graph' or request.path.startswith('/graph/'))) %} active{% endif %}" href="/graph">☍ Graph Explorer</a>
+        <a class="nav-link{% if current in ['route', 'route-finder'] or (not current and (request.path == '/route' or request.path.startswith('/route/') or request.path == '/route-finder' or request.path.startswith('/route-finder/'))) %} active{% endif %}" href="/route">🧭 Route Finder</a>
+        <a class="nav-link{% if current in ['leak_detection', 'leak-detection'] or (not current and (request.path == '/leak-detection' or request.path.startswith('/leak-detection/'))) %} active{% endif %}" href="/leak-detection">⚠ Leak Detection</a>
+        <a class="nav-link{% if current in ['repairs', 'repair_queue', 'repair-queue'] or (not current and (request.path == '/repairs' or request.path.startswith('/repairs/') or request.path == '/repair-queue' or request.path.startswith('/repair-queue/'))) %} active{% endif %}" href="/repairs">🔧 Repair Queue</a>
+        <a class="nav-link{% if current == 'allocation' or (not current and (request.path == '/allocation' or request.path.startswith('/allocation/'))) %} active{% endif %}" href="/allocation">⚖ Water Allocation</a>
+        <a class="nav-link{% if current == 'distribution' or (not current and (request.path == '/distribution' or request.path.startswith('/distribution/'))) %} active{% endif %}" href="/distribution">🌊 Distribution</a>
+    </nav>
+    <div class="sidebar-bottom">SDG 6 · Clean Water<br>Prototype · Demo Mode</div>
+</aside>
+

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Pipe | AquaGrid</title>
+    <meta name="description" content="Edit a water distribution pipe in the AquaGrid platform.">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/network.css') }}">
+</head>
+
+<body>
+    {% set active_page = 'pipes' %}
+    {% include 'sidebar.html' %}
+
+    <main class="main-content">
+
+        <header class="topbar">
+            <div>
+                <p class="eyebrow">WATER INTELLIGENCE PLATFORM</p>
+                <h1>Edit Pipe</h1>
+                <p class="muted">Update the details for <strong>{{ pipe.name }}</strong> (ID {{ pipe.id }}).</p>
+            </div>
+            <a href="{{ url_for('pipes') }}" class="back-link" id="back-to-pipes">← Back to Pipes</a>
+        </header>
+
+        <!-- ── Flash messages ──────────────────────────────────────────── -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-list" role="alert" aria-live="polite">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+                <span class="flash-icon">{% if category == 'success' %}✓{% else %}⚠{% endif %}</span>
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <section class="panel nw-form-panel">
+            <form method="POST" action="{{ url_for('pipes_edit', pipe_id=pipe.id) }}" class="nw-form" novalidate
+                id="edit-pipe-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <!-- Row 1: name, from, to, status -->
+                <div class="form-row pipe-form-row-1">
+                    <div class="form-group">
+                        <label for="pipe-name">Pipe Name <span class="req">*</span></label>
+                        <input type="text" id="pipe-name" name="name" maxlength="120"
+                            value="{{ pipe.name }}" required autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="from_node_id">From Node <span class="req">*</span></label>
+                        <select id="from_node_id" name="from_node_id" required>
+                            {% for node_id, node_name in node_map.items() %}
+                            <option value="{{ node_id }}"
+                                {% if pipe.from_node_id == node_id %}selected{% endif %}>
+                                {{ node_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="to_node_id">To Node <span class="req">*</span></label>
+                        <select id="to_node_id" name="to_node_id" required>
+                            {% for node_id, node_name in node_map.items() %}
+                            <option value="{{ node_id }}"
+                                {% if pipe.to_node_id == node_id %}selected{% endif %}>
+                                {{ node_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pipe-status">Status <span class="req">*</span></label>
+                        <select id="pipe-status" name="status" required>
+                            {% for s in allowed_statuses %}
+                            <option value="{{ s }}" {% if pipe.status == s %}selected{% endif %}>
+                                {{ s | capitalize }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Row 2: length, capacity, cost -->
+                <div class="form-row pipe-form-row-2">
+                    <div class="form-group">
+                        <label for="length_m">Length (metres) <span class="req">*</span></label>
+                        <input type="number" id="length_m" name="length_m" min="0.01" step="any"
+                            value="{{ pipe.length_m }}" required autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="capacity_lpm">Capacity (L/min) <span class="req">*</span></label>
+                        <input type="number" id="capacity_lpm" name="capacity_lpm" min="0.01" step="any"
+                            value="{{ pipe.capacity_lpm }}" required autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cost">
+                            Routing Cost (units) <span class="req">*</span>
+                            <span class="cost-hint" title="Configurable edge weight for routing algorithms (Dijkstra). Positive value. Not a financial value and not live sensor data.">ℹ</span>
+                        </label>
+                        <input type="number" id="cost" name="cost" min="0.01" step="any"
+                            value="{{ pipe.cost }}" required autocomplete="off">
+                        <span class="field-hint">Algorithm weight in units (Default: 1.0 unit per 100 m) · positive · not financial cost</span>
+                    </div>
+                </div>
+
+                <div class="edit-actions">
+                    <button type="submit" class="primary-button nw-submit-btn" id="save-pipe-btn">
+                        ✓ Save Changes
+                    </button>
+                    <a href="{{ url_for('pipes') }}" class="cancel-link" id="cancel-pipe-edit">Cancel</a>
+                </div>
+            </form>
+        </section>
+
+        <footer>
+            AQUAGRID · MCA PROJECT PROTOTYPE · ALL DISPLAYED METRICS ARE DEMONSTRATION DATA · ROUTING COST IS AN ALGORITHM WEIGHT, NOT A FINANCIAL VALUE
+        </footer>
+    </main>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+
+</html>
